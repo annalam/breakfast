@@ -209,6 +209,4 @@ pub fn build_cli() -> App<'static, 'static> {
             .arg(Arg::with_name("reads")
                 .takes_value(true)
                 .required(true)))
-
-
 }
