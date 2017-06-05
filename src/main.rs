@@ -2,11 +2,16 @@
 // BreakFast is a toolkit for detecting chromosomal rearrangements
 // based on RNA-seq data.
 
+use std::env;
+use std::process::Command;
+
 #[macro_use]
 extern crate clap;
+extern crate shells;
 extern crate bio;
 
 mod cli;
+mod lib;
 // struct for having breakfast options
 struct BfOptions {
     anchor_len :    i32,
@@ -72,5 +77,55 @@ fn main() {
       freq_above = matches.value_of("freq-above").unwrap().parse::<i32>().unwrap();
   }
 
+  if let ("detect", Some(detect)) = matches.subcommand() {
+      let bam_file = String::from(detect.value_of("bam_file").unwrap());
+      let genome   = String::from(detect.value_of("genome").unwrap());
+      let out_prefix  = String::from(detect.value_of("out_prefix").unwrap());
+
+      detectf(bam_file, out_prefix, max_frag_len, min_mapq, orientation);
+  }
+
+  if let ("detectspecific", Some(detectspecific)) = matches.subcommand() {
+      let bam_file = String::from(detectspecific.value_of("bam_file").unwrap());
+      let genome   = String::from(detectspecific.value_of("genome").unwrap());
+      let out_prefix  = String::from(detectspecific.value_of("out_prefix").unwrap());
+      let donors  = String::from(detectspecific.value_of("donors").unwrap());
+      let acceptors  = String::from(detectspecific.value_of("acceptors").unwrap());
+  }
+
   println!("Hello, world!");
+}
+
+
+// DETECT //
+//======= //
+
+fn detectf(sam_path: String, out_prefix: String, max_frag_len: i32,
+	min_mapq: i32, orientation: String) {
+  println!("BreakFast DETECT Function Called");
+  println!("{:?}\t{:?}\t{:?}\t{:?}\t{:?}", sam_path, out_prefix, max_frag_len, min_mapq, orientation);
+
+  let extn = String::from(".discordant_pairs.tsv.gz");
+  let out  = out_prefix + &extn;
+
+  lib::mkdir(&out);
+  println!("Searching for discordant read pairs ...");
+
+
+  let lines = Command::new("sam")
+          .arg("discordant")
+          .arg("pairs")
+          .arg("-q")
+          .arg(&min_mapq.to_string())
+          .arg(&sam_path)
+          .arg(&max_frag_len.to_string())
+          //.arg("|")
+          //.arg("sort")
+          //.arg("-k1,1")
+          //.arg("-T")
+          //.arg(&out)
+          .spawn()
+          .expect("SAM failed running");
+
+      println!("{:?}", lines.stdout);
 }
