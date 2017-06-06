@@ -4,6 +4,7 @@ version = "0.1.0"
 dependencies = [
  "bio 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.19.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "regex 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "shells 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

@@ -7,3 +7,4 @@ authors = ["Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
 clap = {version = "~2.19.0", features = ["yaml"]}
 bio = "*"
 shells = "*"
+regex = "0.2"
