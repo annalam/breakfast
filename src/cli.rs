@@ -20,11 +20,11 @@ pub fn build_cli() -> App<'static, 'static> {
         \tbreakfast filter by region <sv_file> <region>\n\
         \tbreakfast filter by distance <min_distance> <sv_file>\n\
         \tbreakfast align junction <reads>")
-
+        // args values are taken from subcommands
+        // listed below are only for --help display and testing purpose
         .arg(Arg::with_name("anchor-len")
             .short("a")
             .long("anchor-len")
-            .takes_value(true)
             .value_name("N")
             .display_order(1)
             .help("Anchor length for split read analysis. When zero, split reads are not used [default: 0]"))
@@ -32,7 +32,6 @@ pub fn build_cli() -> App<'static, 'static> {
         .arg(Arg::with_name("max-frag-len")
             .short("f")
             .long("max-frag-len")
-            .takes_value(true)
             .value_name("N")
             .display_order(2)
             .help("Maximum fragment length [default: 5000]"))
@@ -40,7 +39,6 @@ pub fn build_cli() -> App<'static, 'static> {
         .arg(Arg::with_name("min-mapq")
             .short("q")
             .long("min-mapq")
-            .takes_value(true)
             .value_name("N")
             .display_order(3)
             .help("Minimum mapping quality to consider [default: 15]"))
@@ -48,7 +46,6 @@ pub fn build_cli() -> App<'static, 'static> {
         .arg(Arg::with_name("orientation")
             .short("O")
             .long("orientation")
-            .takes_value(true)
             .value_name("OR")
             .display_order(4)
             .help("Read pair orientation produced by sequencer. Either 'fr' (converging), 'rf' (diverging) or 'ff' [default: fr]"))
@@ -61,14 +58,12 @@ pub fn build_cli() -> App<'static, 'static> {
 
         .arg(Arg::with_name("discard-duplicates")
             .long("discard-duplicates")
-            .takes_value(true)
             .value_name("Method")
             .display_order(6)
             .help("Method to use when discarding duplicate reads.'both-ends' considers a read pair (or unaligned read) to be a duplicate of another if the positions"))
 
         .arg(Arg::with_name("blacklist")
             .long("blacklist")
-            .takes_value(true)
             .value_name("list")
             .display_order(7)
             .help("Path to a file containing blacklisted regions."))
@@ -76,14 +71,12 @@ pub fn build_cli() -> App<'static, 'static> {
         .arg(Arg::with_name("min-reads")
             .short("r")
             .long("min-reads")
-            .takes_value(true)
             .value_name("P-S-A")
             .display_order(8)
             .help("Minimum number of spanning reads required to accept a breakpoint. Specified in the format P-S-A, where P=paired, S=split, A=either. For example, -r 1-2-0 would require at least one mate pair and two split reads of evidence [default: 0-0-0]."))
 
         .arg(Arg::with_name("freq-above")
             .long("freq-above")
-            .takes_value(true)
             .value_name("FREQ")
             .display_order(9)
             .help("Minimum frequency at which a variant must be present among the control samples to be considered a false positive [default: 0]."))
