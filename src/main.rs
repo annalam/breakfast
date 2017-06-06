@@ -3,12 +3,21 @@
 // based on RNA-seq data.
 
 use std::env;
+use std::mem;
+use std::path::Path;
 use std::process::Command;
 
 #[macro_use]
 extern crate clap;
+#[macro_use]
 extern crate shells;
+#[macro_use]
 extern crate bio;
+#[macro_use]
+extern crate regex;
+
+
+use regex::Regex;
 
 mod cli;
 mod lib;
@@ -45,6 +54,7 @@ fn main() {
 
   //arguments from src/cli.rs
   let matches = cli::build_cli().get_matches();
+  /*
   if matches.is_present("anchor-len") {
       anchor_len = matches.value_of("anchor-len").unwrap().parse::<i32>().unwrap();
   }
@@ -55,10 +65,6 @@ fn main() {
 
   if matches.is_present("min-mapq") {
       min_mapq = matches.value_of("min-mapq").unwrap().parse::<i32>().unwrap();
-  }
-
-  if matches.is_present("orientation") {
-      orientation = String::from(matches.value_of("orientation").unwrap());
   }
 
   if matches.is_present("all-reads") {
@@ -75,14 +81,17 @@ fn main() {
 
   if matches.is_present("freq-above") {
       freq_above = matches.value_of("freq-above").unwrap().parse::<i32>().unwrap();
-  }
+  } */
 
   if let ("detect", Some(detect)) = matches.subcommand() {
       let bam_file = String::from(detect.value_of("bam_file").unwrap());
       let genome   = String::from(detect.value_of("genome").unwrap());
       let out_prefix  = String::from(detect.value_of("out_prefix").unwrap());
 
-      detectf(bam_file, out_prefix, max_frag_len, min_mapq, orientation);
+      if detect.is_present("orientation") {
+          orientation = String::from(detect.value_of("orientation").unwrap());
+      }
+      detect_discordant_pairs(bam_file, out_prefix, max_frag_len, min_mapq, orientation);
   }
 
   if let ("detectspecific", Some(detectspecific)) = matches.subcommand() {
@@ -100,10 +109,17 @@ fn main() {
 // DETECT //
 //======= //
 
-fn detectf(sam_path: String, out_prefix: String, max_frag_len: i32,
+fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i32,
 	min_mapq: i32, orientation: String) {
-  println!("BreakFast DETECT Function Called");
   println!("{:?}\t{:?}\t{:?}\t{:?}\t{:?}", sam_path, out_prefix, max_frag_len, min_mapq, orientation);
+
+  let mut N = 0;
+  let tmp = out_prefix.clone();
+  let given_path = Path::new(&tmp);
+  let mut sort_tmp_dir = Path::new("./");
+  if given_path.is_absolute()  {
+        sort_tmp_dir = given_path.parent().unwrap();
+  }
 
   let extn = String::from(".discordant_pairs.tsv.gz");
   let out  = out_prefix + &extn;
@@ -111,21 +127,81 @@ fn detectf(sam_path: String, out_prefix: String, max_frag_len: i32,
   lib::mkdir(&out);
   println!("Searching for discordant read pairs ...");
 
+  let (code, stdout, stderr) = sh!("sam discordant pairs --min-mapq={} {} {} | sort -k1,1 -T {:?}", min_mapq, sam_path, max_frag_len, sort_tmp_dir);
 
-  let lines = Command::new("sam")
-          .arg("discordant")
-          .arg("pairs")
-          .arg("-q")
-          .arg(&min_mapq.to_string())
-          .arg(&sam_path)
-          .arg(&max_frag_len.to_string())
-          //.arg("|")
-          //.arg("sort")
-          //.arg("-k1,1")
-          //.arg("-T")
-          //.arg(&out)
-          .spawn()
-          .expect("SAM failed running");
+  let mut prev : Vec<&str> = Vec::new();
+  for line in stdout.lines() {
+      let mut cols: Vec<&str> = line.split('\t').collect();
+      if cols.len() < 9 { continue; }
 
-      println!("{:?}", lines.stdout);
+      let r1 = Regex::new(r"N").unwrap();
+      let r2 = Regex::new(r"S").unwrap();
+
+      if r1.is_match(cols[5]) || r2.is_match(cols[5]) { continue; }
+      else if cols[0].ends_with("/1") || cols[0].ends_with("/2") {
+          let tmp : Vec<&str> = cols[0].split('/').collect();
+          cols[0] = tmp[0];
+      }
+      if prev.len() <= 0 { prev = cols.clone(); }
+      else if prev.len() > 0 && cols[0] != prev[0] { prev = cols.clone(); }
+
+      let flags = &cols[1].parse::<i32>().unwrap();
+      let mut chr   = String::from(cols[2]);
+      let mut mchr  = String::from(prev[2]);
+      let mut strand = '-';
+      let mut mstrand = '-';
+      let mut pos  = cols[3].parse::<i32>().unwrap();
+      let mut mpos = prev[3].parse::<i32>().unwrap();
+      let mut rlen = cols[9].clone().len() as i32;
+      let mut mrlen= prev[9].clone().len() as i32;
+
+      if chr.starts_with("chr") {  chr = chr; }
+      else { let prefix = String::from("chr"); chr = prefix + &chr;}
+
+      if mchr.starts_with("chr") {  chr = chr ;}
+      else { let prefix = String::from("chr"); mchr = prefix + &mchr;}
+
+      if chr.contains("chrM") || mchr.contains("chrM") { continue;}
+
+      if orientation == "fr" {
+        if chr > mchr || (chr == mchr && pos > mpos) {
+          mem::swap(&mut chr, &mut mchr);
+          mem::swap(&mut pos, &mut mpos);
+          mem::swap(&mut rlen, &mut mrlen);
+          mem::swap(&mut strand, &mut mstrand);
+        }
+        if mstrand == '+' { mstrand = '-';}
+        else { mstrand = '+'; }
+      }
+
+      else if orientation == "rf" {
+        if chr > mchr || (chr == mchr && pos > mpos) {
+          mem::swap(&mut chr, &mut mchr);
+          mem::swap(&mut pos, &mut mpos);
+          mem::swap(&mut rlen, &mut mrlen);
+          mem::swap(&mut strand, &mut mstrand);
+        }
+        if strand == '+' { strand = '-';}
+        else { strand = '+'; }
+      }
+
+      else if orientation == "ff" {
+        if chr > mchr || (chr == mchr && pos > mpos) {
+          mem::swap(&mut chr, &mut mchr);
+          mem::swap(&mut pos, &mut mpos);
+          mem::swap(&mut rlen, &mut mrlen);
+
+          if mstrand == '-' { mstrand = '+';} else { mstrand = '-'; }
+          if strand  == '-' { strand  = '+';} else { strand  = '-'; }
+          mem::swap(&mut strand, &mut mstrand);
+        }
+      } else { panic!("Unsupported read orientation detected."); }
+
+      if strand  == '-' { pos  +=  rlen - 1;}
+      if mstrand == '-' { mpos += mrlen - 1;}
+
+      println!("{}\t{}\t{}\t{}\t{}\t{}", chr, strand, pos, mchr, mstrand, mpos);
+      N += 1;
+    }
+    println!("Found {:?} discordant mate pairs.", N);
 }
