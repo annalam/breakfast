@@ -5,6 +5,9 @@
 use std::env;
 use std::mem;
 use std::path::Path;
+use std::io::prelude::*;
+use std::fs;
+use std::fs::File;
 use std::process::Command;
 
 #[macro_use]
@@ -88,10 +91,15 @@ fn main() {
       let genome   = String::from(detect.value_of("genome").unwrap());
       let out_prefix  = String::from(detect.value_of("out_prefix").unwrap());
 
+      if detect.is_present("anchor-len") {
+          anchor_len = detect.value_of("anchor-len").unwrap().parse::<i32>().unwrap();
+      }
+
       if detect.is_present("orientation") {
           orientation = String::from(detect.value_of("orientation").unwrap());
       }
-      detect_discordant_pairs(bam_file, out_prefix, max_frag_len, min_mapq, orientation);
+      //detect_discordant_pairs(bam_file, out_prefix, max_frag_len, min_mapq, orientation);
+      detect_discordant_reads(bam_file, genome, out_prefix, anchor_len);
   }
 
   if let ("detectspecific", Some(detectspecific)) = matches.subcommand() {
@@ -123,8 +131,9 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 
   let extn = String::from(".discordant_pairs.tsv.gz");
   let out  = out_prefix + &extn;
+  let mut file = File::create("test.txt").unwrap();
 
-  lib::mkdir(&out);
+  lib::mkdir(&tmp);
   println!("Searching for discordant read pairs ...");
 
   let (code, stdout, stderr) = sh!("sam discordant pairs --min-mapq={} {} {} | sort -k1,1 -T {:?}", min_mapq, sam_path, max_frag_len, sort_tmp_dir);
@@ -200,8 +209,40 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
       if strand  == '-' { pos  +=  rlen - 1;}
       if mstrand == '-' { mpos += mrlen - 1;}
 
-      println!("{}\t{}\t{}\t{}\t{}\t{}", chr, strand, pos, mchr, mstrand, mpos);
+      let mut out = String::new();
+      out.push_str(&chr);out.push_str(&"\t");
+      out.push_str(&strand.to_string());out.push_str(&"\t");
+      out.push_str(&pos.to_string());out.push_str(&"\t");
+      out.push_str(&mchr);out.push_str(&"\t");
+      out.push_str(&mstrand.to_string());out.push_str(&"\t");
+      out.push_str(&mpos.to_string());out.push_str(&"\t-\n");
+      file.write_all(out.as_bytes());
       N += 1;
     }
+    let (wcode, wstdout, wstderr) = sh!("gzip -c {:?}.txt > {}", given_path, out);
+    let mut rm_tmp = tmp.to_string() + ".txt";
+    fs::remove_file(rm_tmp);
     println!("Found {:?} discordant mate pairs.", N);
+}
+
+
+fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: String, anchor_len: i32) {
+
+  let mut N: i32 = 0;
+  println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
+
+  println!("{:?}\t{:?}\t{:?}\t", &sam_path, &anchor_len, &genome_path);
+
+  let (samcode, samout, samerr) = sh!("samtools fasta -f 0x4 {} | fasta split interleaved - {}",  sam_path, anchor_len);
+
+  let (bowtiecode, bowtieout, bowtierr) = sh!("bowtie -f -p1 -v0 -m1 -B1 --suppress 5,6,7,8 {} {}", genome_path, samout);
+
+  for line in bowtieout.lines(){
+      println!("{:?}", line);
+  }
+  println!("SAMCODE {:?}", samcode);
+  println!("Error reported code by SAM \t\t\t{:?}", samerr);
+
+  println!("BOWTIECODE {:?}", bowtiecode);
+  println!("Error reported code by BOWTIE \t\t\t{:?}", bowtierr);
 }
