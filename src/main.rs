@@ -40,6 +40,18 @@ struct BfOptions {
     freq_above:     i32,
 }
 
+struct Read {
+	chr: String,
+	pos: u32,
+	strand: bool,
+	mchr: String,
+	mpos: u32,
+	mstrand: bool,
+	sequence: String,
+	read_id: String,
+	signature: String     // Breakpoint signature
+}
+
 fn main() {
   let defaults = BfOptions{ anchor_len : 0,
                             max_frag_len: 5000,
