@@ -39,8 +39,10 @@ struct BfOptions {
 struct Read {
 	chr: String,
 	pos: u32,
+	strand: bool,
 	mchr: String,
 	mpos: u32,
+	mstrand: bool,
 	sequence: String,
 	read_id: String,
 	signature: String     // Breakpoint signature
