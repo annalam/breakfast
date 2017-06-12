@@ -1,10 +1,8 @@
-extern crate subprocess;
 
 use std::io::Read;
 use std::path::Path;
 use std::fs::File;
 use std::process::Command;
-use subprocess::{Exec, Popen, PopenConfig, Redirection};
 use std::io::{BufReader, BufRead};
 
 

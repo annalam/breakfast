@@ -4,8 +4,6 @@ version = "0.1.0"
 authors = ["Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
 
 [dependencies]
-clap = {version = "~2.19.0", features = ["yaml"]}
+clap = {version = "~2.19.0"}
 bio = "*"
-shells = "*"
 regex = "0.2"
-subprocess = "0.1.10"
