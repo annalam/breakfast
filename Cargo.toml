@@ -8,3 +8,4 @@ clap = {version = "~2.19.0", features = ["yaml"]}
 bio = "*"
 shells = "*"
 regex = "0.2"
+subprocess = "0.1.10"

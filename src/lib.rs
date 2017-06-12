@@ -1,6 +1,12 @@
+extern crate subprocess;
+
+use std::io::Read;
 use std::path::Path;
 use std::fs::File;
 use std::process::Command;
+use subprocess::{Exec, Popen, PopenConfig, Redirection};
+use std::io::{BufReader, BufRead};
+
 
 pub fn mkdir(path: &String) {
   if Path::new(path).exists(){
@@ -14,6 +20,15 @@ pub fn mkdir(path: &String) {
 }
 
 pub fn zopen(path: &String, mode: String) {
-  
 
 }
+
+pub fn read_whole_file<T: Read>(mut f: T) -> String {
+        let mut content = String::new();
+        f.read_to_string(&mut content).unwrap();
+        content
+}
+
+pub fn shell_stdout() {
+}
+

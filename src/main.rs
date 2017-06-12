@@ -8,7 +8,8 @@ use std::path::Path;
 use std::io::prelude::*;
 use std::fs;
 use std::fs::File;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::io::{BufReader, BufRead, Read, Write};
 
 #[macro_use]
 extern crate clap;
@@ -18,12 +19,15 @@ extern crate shells;
 extern crate bio;
 #[macro_use]
 extern crate regex;
-
+#[macro_use]
+extern crate subprocess;
 
 use regex::Regex;
+use subprocess::{Exec, Popen, PopenConfig, Redirection};
 
 mod cli;
 mod lib;
+
 // struct for having breakfast options
 struct BfOptions {
     anchor_len :    i32,
@@ -57,35 +61,7 @@ fn main() {
 
   //arguments from src/cli.rs
   let matches = cli::build_cli().get_matches();
-  /*
-  if matches.is_present("anchor-len") {
-      anchor_len = matches.value_of("anchor-len").unwrap().parse::<i32>().unwrap();
-  }
-
-  if matches.is_present("max-frag-len") {
-      max_frag_len = matches.value_of("max-frag-len").unwrap().parse::<i32>().unwrap();
-  }
-
-  if matches.is_present("min-mapq") {
-      min_mapq = matches.value_of("min-mapq").unwrap().parse::<i32>().unwrap();
-  }
-
-  if matches.is_present("all-reads") {
-      all_reads = true;
-  }
-
-  if matches.is_present("discard-duplicates") {
-      discard_duplicates = String::from(matches.value_of("discard-duplicates").unwrap());
-  }
-
-  if matches.is_present("min-reads") {
-      min_reads = String::from(matches.value_of("min-reads").unwrap());
-  }
-
-  if matches.is_present("freq-above") {
-      freq_above = matches.value_of("freq-above").unwrap().parse::<i32>().unwrap();
-  } */
-
+  //arguments from detect subcommand
   if let ("detect", Some(detect)) = matches.subcommand() {
       let bam_file = String::from(detect.value_of("bam_file").unwrap());
       let genome   = String::from(detect.value_of("genome").unwrap());
@@ -102,6 +78,7 @@ fn main() {
       detect_discordant_reads(bam_file, genome, out_prefix, anchor_len);
   }
 
+  //arguments from detectspecific subcommand
   if let ("detectspecific", Some(detectspecific)) = matches.subcommand() {
       let bam_file = String::from(detectspecific.value_of("bam_file").unwrap());
       let genome   = String::from(detectspecific.value_of("genome").unwrap());
@@ -228,21 +205,55 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 
 fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: String, anchor_len: i32) {
 
-  let mut N: i32 = 0;
-  println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
+    //let mut N: i32 = 0;
+    println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
 
-  println!("{:?}\t{:?}\t{:?}\t", &sam_path, &anchor_len, &genome_path);
+    println!("{:?}\t{:?}\t{:?}\t", &sam_path, &anchor_len, &genome_path);
 
-  let (samcode, samout, samerr) = sh!("samtools fasta -f 0x4 {} | fasta split interleaved - {}",  sam_path, anchor_len);
+    let mut sam = Command::new("samtools")
+                    .args(&["fasta", "-f", "0x4", &sam_path])
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .unwrap();
 
-  let (bowtiecode, bowtieout, bowtierr) = sh!("bowtie -f -p1 -v0 -m1 -B1 --suppress 5,6,7,8 {} {}", genome_path, samout);
+    let mut fas = Command::new("fasta")
+                  .args(&["split", "interleaved", "-", &anchor_len.to_string()])
+                  .stdin(Stdio::piped())
+                  .stdout(Stdio::piped())
+                  .spawn()
+                  .unwrap();
 
-  for line in bowtieout.lines(){
-      println!("{:?}", line);
-  }
-  println!("SAMCODE {:?}", samcode);
-  println!("Error reported code by SAM \t\t\t{:?}", samerr);
+    let mut bow = Command::new("bowtie")
+                  .args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
+                  .stdin(Stdio::piped())
+                  .stdout(Stdio::piped())
+                  .spawn()
+                  .unwrap();
+    /*
+    if let Some(ref mut stdout)  = sam.stdout {
+      if let Some(ref mut stdin) = fas.stdin {
+          let mut buf: Vec<u8> = Vec::new();
+          stdout.read_to_end(&mut buf).unwrap();
+          stdin.write_all(&buf).unwrap();
+          }
+        }
+    let res = fas.wait_with_output().unwrap().stdout;
+    */
+    let mut samres = String::new();
+      match sam.stdout.unwrap().read_to_string(&mut samres) {
+          Err(why) => panic!("samtools not running!"),
+          Ok(_) => print!("samtools worked!"),
+      }
 
-  println!("BOWTIECODE {:?}", bowtiecode);
-  println!("Error reported code by BOWTIE \t\t\t{:?}", bowtierr);
+    match fas.stdin.unwrap().write_all(samres.as_bytes()) {
+        Err(why) => panic!("samtools results not reaching fasta"),
+        Ok(_) => print!("fasta recvied input from samtools"),
+    }
+
+    let mut res = String::new();
+      match fas.stdout.unwrap().read_to_string(&mut res) {
+          Err(why) => panic!("fasta not running!"),
+          Ok(_) => print!("fasta subcommand worked!"),
+      }
+      println!("{:?}", res.len());
 }
