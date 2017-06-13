@@ -228,19 +228,13 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
 		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
 	}
 
-
 	let bam = bam::Reader::from_path(&sam_path).unwrap();
 	for r in bam.records() {
 		let read = r.unwrap();
 		let seq = read.seq();
+		// TODO: Extract anchors from both ends of read and write in
+		// interleaved FASTA format to the stdin of Bowtie.
 	}
-
-    let mut fas = Command::new("fasta")
-                  .args(&["split", "interleaved", "-", &anchor_len.to_string()])
-                  .stdin(Stdio::piped())
-                  .stdout(Stdio::piped())
-                  .spawn()
-                  .unwrap();
 
     let mut bow = Command::new("bowtie")
                   .args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
