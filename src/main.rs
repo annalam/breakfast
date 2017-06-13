@@ -11,9 +11,12 @@ use std::fs::File;
 use std::process::{Command, Stdio};
 use std::collections::HashMap;
 use std::io::{BufReader, BufRead, Read, Write};
+use rust_htslib::bam;
+use rust_htslib::bam::Read as HTSRead;
 
 extern crate clap;
 extern crate bio;
+extern crate rust_htslib;
 
 mod cli;
 mod lib;
@@ -38,7 +41,7 @@ struct Evidence {
 	mpos: u32,
 	mstrand: bool,
 	sequence: String,
-	read_id: String,
+	frag_id: String,
 	signature: String     // Breakpoint signature
 }
 
@@ -218,14 +221,19 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
                     .spawn()
                     .unwrap();
 
-  let fastq = bio::io::fasta::Reader::from_file("/home/annalam/homo_sapiens/hg38.fa").unwrap();
-  let mut genome = HashMap::new();
-  for entry in fastq.records() {
-  	let chr = entry.unwrap();
-  	let name = chr.id().unwrap().to_owned();
-  	let seq = chr.seq().to_owned();
-  	genome.insert(name, seq);
-  }
+	let fastq = bio::io::fasta::Reader::from_file("/home/annalam/homo_sapiens/hg38.fa").unwrap();
+	let mut genome = HashMap::new();
+	for entry in fastq.records() {
+		let chr = entry.unwrap();
+		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
+	}
+
+
+	let bam = bam::Reader::from_path(&sam_path).unwrap();
+	for r in bam.records() {
+		let read = r.unwrap();
+		let seq = read.seq();
+	}
 
     let mut fas = Command::new("fasta")
                   .args(&["split", "interleaved", "-", &anchor_len.to_string()])
