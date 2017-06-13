@@ -4,6 +4,8 @@
 
 use std::env;
 use std::mem;
+use std::thread;
+use std::sync::mpsc;
 use std::path::Path;
 use std::io::prelude::*;
 use std::fs;
@@ -215,19 +217,17 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
     println!("{:?}\t{:?}\t{:?}\t", &sam_path, &anchor_len, &genome_path);
 
     println!("Reading reference genome into memory...");
-	let fastq = bio::io::fasta::Reader::from_file("/home/annalam/homo_sapiens/hg38.fa").unwrap();
+	//let fastq = bio::io::fasta::Reader::from_file("/home/annalam/homo_sapiens/hg38.fa").unwrap();
+	let fastq = bio::io::fasta::Reader::from_file("/home/gnanavel/tools/homo_sapiens/hg38.fa").unwrap();
 	let mut genome = HashMap::new();
 	for entry in fastq.records() {
 		let chr = entry.unwrap();
 		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
 	}
 
-    let mut bowtie = Command::new("bowtie")
-		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
-        .stdin(Stdio::piped()).stdout(Stdio::piped())
-        .spawn().unwrap();
-    let mut bowtie_stdin = bowtie.stdin.as_mut().unwrap();
-
+    let (child_in, child_out)= mpsc::channel();
+    
+    thread::spawn(move || {
 	let bam = bam::Reader::from_path(&sam_path).unwrap();
 	let mut R = 0;
 	for r in bam.records() {
@@ -236,25 +236,39 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
 		if read.seq().len() < anchor_len * 2 { continue; }
 		// TODO: Extract anchors from both ends of read and write in
 		// interleaved FASTA format to the stdin of Bowtie.
-		R += 1;
-		write!(bowtie_stdin, ">{}_1\n{:?}\n", R, &read.seq().as_bytes()[..anchor_len]);
-	}
+        R += 1;
 
-    /*
-    if let Some(ref mut stdout)  = sam.stdout {
-      if let Some(ref mut stdin) = fas.stdin {
-          let mut buf: Vec<u8> = Vec::new();
-          stdout.read_to_end(&mut buf).unwrap();
-          stdin.write_all(&buf).unwrap();
-          }
-        }
-    let res = fas.wait_with_output().unwrap().stdout;
-    */
-    // let mut samres = String::new();
-    //   match sam.stdout.unwrap().read_to_string(&mut samres) {
-    //       Err(why) => panic!("samtools not running!"),
-    //       Ok(_) => print!("samtools worked!"),
-    //   }
+        //write!(bowtie_stdin, ">{}_1\n{:?}\n", R, &read.seq().as_bytes()[..anchor_len]);
+        let seq = String::from_utf8(read.seq().as_bytes()).unwrap();
+        let tail = seq.len() - anchor_len ;
+        let fas = ">".to_string()+&R.to_string()+"_1\n"+&seq[..anchor_len]+"\n>"+&R.to_string()+"_2\n"+&seq[tail..]+"\n";
+        child_in.send(fas).unwrap();
+    }
+    });
+    
+    let mut bowtie = Command::new("bowtie")
+		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
+        .stdin(Stdio::piped()).stdout(Stdio::piped())
+        .spawn().unwrap();
+    
+    let mut bowtie_stdin = bowtie.stdin.as_mut().unwrap();
+
+    //println!("{}", child_out.recv().unwrap());
+    //TODO: bowtie is not recognizing fata format
+    // check the formatting
+    // write and feed a tmpfile to bowtie maybe!?
+    write!(bowtie_stdin, "{:?}", child_out.recv().unwrap());
+
+     let mut bowtie_out = String::new();
+       match bowtie.stdout.unwrap().read_to_string(&mut bowtie_out) {
+           Err(why) => panic!("bowtie not running!"),
+           Ok(_) => print!("bowtie worked!"),
+       }
+
+    for line in bowtie_out.lines() {
+        println!("BOowtie stdou lines");
+        println!("{}", line);
+    }
 
     // match fas.stdin.unwrap().write_all(samres.as_bytes()) {
     //     Err(why) => panic!("samtools results not reaching fasta"),
