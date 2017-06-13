@@ -7,3 +7,5 @@ authors = ["Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
 clap = {version = "~2.19.0"}
 bio = "*"
 regex = "0.2"
+subprocess= "*"
+shells = "*"
