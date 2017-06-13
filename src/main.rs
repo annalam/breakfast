@@ -214,6 +214,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
 
     println!("{:?}\t{:?}\t{:?}\t", &sam_path, &anchor_len, &genome_path);
 
+    println!("Reading reference genome into memory...");
 	let fastq = bio::io::fasta::Reader::from_file("/home/annalam/homo_sapiens/hg38.fa").unwrap();
 	let mut genome = HashMap::new();
 	for entry in fastq.records() {
@@ -222,11 +223,10 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
 	}
 
     let mut bowtie = Command::new("bowtie")
-                  .args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
-                  .stdin(Stdio::piped())
-                  .stdout(Stdio::piped())
-                  .spawn()
-                  .unwrap();
+		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
+        .stdin(Stdio::piped()).stdout(Stdio::piped())
+        .spawn().unwrap();
+    let mut bowtie_stdin = bowtie.stdin.as_mut().unwrap();
 
 	let bam = bam::Reader::from_path(&sam_path).unwrap();
 	for r in bam.records() {
@@ -235,8 +235,8 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
 		if read.seq().len() < anchor_len * 2 { continue; }
 		// TODO: Extract anchors from both ends of read and write in
 		// interleaved FASTA format to the stdin of Bowtie.
+		bowtie_stdin.write(&read.seq().as_bytes()[..anchor_len]);
 	}
-
 
     /*
     if let Some(ref mut stdout)  = sam.stdout {
