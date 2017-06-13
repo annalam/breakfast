@@ -9,6 +9,7 @@ use std::io::prelude::*;
 use std::fs;
 use std::fs::File;
 use std::process::{Command, Stdio};
+use std::collections::HashMap;
 use std::io::{BufReader, BufRead, Read, Write};
 
 extern crate clap;
@@ -218,10 +219,12 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
                     .unwrap();
 
   let fastq = bio::io::fasta::Reader::from_file("/home/annalam/homo_sapiens/hg38.fa").unwrap();
-  //let mut genome = 
-  for chr in fastq.records() {
-
-
+  let mut genome = HashMap::new();
+  for entry in fastq.records() {
+  	let chr = entry.unwrap();
+  	let name = chr.id().unwrap().to_owned();
+  	let seq = chr.seq().to_owned();
+  	genome.insert(name, seq);
   }
 
     let mut fas = Command::new("fasta")
