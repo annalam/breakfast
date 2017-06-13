@@ -23,7 +23,7 @@ mod lib;
 
 // struct for having breakfast options
 struct BfOptions {
-    anchor_len :    i32,
+    anchor_len :    usize,
     max_frag_len:   i32,
     min_mapq:       i32,
     orientation:    &'static str,
@@ -55,7 +55,7 @@ fn main() {
                             min_reads:    "0-0-0",
                             freq_above: 0};
 
-  let mut anchor_len: i32   = defaults.anchor_len;
+  let mut anchor_len: usize   = defaults.anchor_len;
   let mut max_frag_len: i32 = defaults.max_frag_len;
   let mut min_mapq: i32     = defaults.min_mapq;
   let mut orientation       = String::from(defaults.orientation);
@@ -73,7 +73,7 @@ fn main() {
       let out_prefix  = String::from(detect.value_of("out_prefix").unwrap());
 
       if detect.is_present("anchor-len") {
-          anchor_len = detect.value_of("anchor-len").unwrap().parse::<i32>().unwrap();
+          anchor_len = detect.value_of("anchor-len").unwrap().parse().unwrap();
       }
 
       if detect.is_present("orientation") {
@@ -208,7 +208,7 @@ fn main() {
 // }
 
 
-fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: String, anchor_len: i32) {
+fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: String, anchor_len: usize) {
 
     println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
 
@@ -221,21 +221,23 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
 		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
 	}
 
-	let bam = bam::Reader::from_path(&sam_path).unwrap();
-	for r in bam.records() {
-		let read = r.unwrap();
-		if read.is_unmapped() == false { continue; }
-		let seq = read.seq();
-		// TODO: Extract anchors from both ends of read and write in
-		// interleaved FASTA format to the stdin of Bowtie.
-	}
-
-    let mut bow = Command::new("bowtie")
+    let mut bowtie = Command::new("bowtie")
                   .args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
                   .stdin(Stdio::piped())
                   .stdout(Stdio::piped())
                   .spawn()
                   .unwrap();
+
+	let bam = bam::Reader::from_path(&sam_path).unwrap();
+	for r in bam.records() {
+		let read = r.unwrap();
+		if read.is_unmapped() == false { continue; }
+		if read.seq().len() < anchor_len * 2 { continue; }
+		// TODO: Extract anchors from both ends of read and write in
+		// interleaved FASTA format to the stdin of Bowtie.
+	}
+
+
     /*
     if let Some(ref mut stdout)  = sam.stdout {
       if let Some(ref mut stdin) = fas.stdin {
