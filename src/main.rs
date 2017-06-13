@@ -229,13 +229,15 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
     let mut bowtie_stdin = bowtie.stdin.as_mut().unwrap();
 
 	let bam = bam::Reader::from_path(&sam_path).unwrap();
+	let mut R = 0;
 	for r in bam.records() {
 		let read = r.unwrap();
 		if read.is_unmapped() == false { continue; }
 		if read.seq().len() < anchor_len * 2 { continue; }
 		// TODO: Extract anchors from both ends of read and write in
 		// interleaved FASTA format to the stdin of Bowtie.
-		bowtie_stdin.write(&read.seq().as_bytes()[..anchor_len]);
+		R += 1;
+		write!(bowtie_stdin, ">{}_1\n{:?}\n", R, &read.seq().as_bytes()[..anchor_len]);
 	}
 
     /*
