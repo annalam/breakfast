@@ -210,16 +210,9 @@ fn main() {
 
 fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: String, anchor_len: i32) {
 
-    //let mut N: i32 = 0;
     println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
 
     println!("{:?}\t{:?}\t{:?}\t", &sam_path, &anchor_len, &genome_path);
-
-    let mut sam = Command::new("samtools")
-                    .args(&["fasta", "-f", "0x4", &sam_path])
-                    .stdout(Stdio::piped())
-                    .spawn()
-                    .unwrap();
 
 	let fastq = bio::io::fasta::Reader::from_file("/home/annalam/homo_sapiens/hg38.fa").unwrap();
 	let mut genome = HashMap::new();
@@ -231,6 +224,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
 	let bam = bam::Reader::from_path(&sam_path).unwrap();
 	for r in bam.records() {
 		let read = r.unwrap();
+		if read.is_unmapped() == false { continue; }
 		let seq = read.seq();
 		// TODO: Extract anchors from both ends of read and write in
 		// interleaved FASTA format to the stdin of Bowtie.
@@ -252,21 +246,21 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
         }
     let res = fas.wait_with_output().unwrap().stdout;
     */
-    let mut samres = String::new();
-      match sam.stdout.unwrap().read_to_string(&mut samres) {
-          Err(why) => panic!("samtools not running!"),
-          Ok(_) => print!("samtools worked!"),
-      }
+    // let mut samres = String::new();
+    //   match sam.stdout.unwrap().read_to_string(&mut samres) {
+    //       Err(why) => panic!("samtools not running!"),
+    //       Ok(_) => print!("samtools worked!"),
+    //   }
 
-    match fas.stdin.unwrap().write_all(samres.as_bytes()) {
-        Err(why) => panic!("samtools results not reaching fasta"),
-        Ok(_) => print!("fasta recvied input from samtools"),
-    }
+    // match fas.stdin.unwrap().write_all(samres.as_bytes()) {
+    //     Err(why) => panic!("samtools results not reaching fasta"),
+    //     Ok(_) => print!("fasta recvied input from samtools"),
+    // }
 
-    let mut res = String::new();
-      match fas.stdout.unwrap().read_to_string(&mut res) {
-          Err(why) => panic!("fasta not running!"),
-          Ok(_) => print!("fasta subcommand worked!"),
-      }
-      println!("{:?}", res.len());
+    // let mut res = String::new();
+    //   match fas.stdout.unwrap().read_to_string(&mut res) {
+    //       Err(why) => panic!("fasta not running!"),
+    //       Ok(_) => print!("fasta subcommand worked!"),
+    //   }
+    //   println!("{:?}", res.len());
 }
