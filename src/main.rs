@@ -212,7 +212,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
 
     let mut bowtie = Command::new("bowtie")
-		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
+		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "-r", "--suppress", "5,6,7,8", &genome_path, "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped())
         .spawn().unwrap();
 
@@ -229,12 +229,10 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			// TODO: Extract anchors from both ends of read and write in
 			// interleaved FASTA format to the stdin of Bowtie.
 	        R += 1;
-	        let seq = read.seq().as_bytes();
+	        let seq = String::from_utf8(read.seq().as_bytes()).unwrap();
 	        //let tail = seq.len() - anchor_len;
-	        write!(bowtie_in, ">{}_1\n{:?}\n", R, &seq[..anchor_len]);
-	        //let fas = ">".to_string()+&R.to_string()+"_1\n"+&seq[..anchor_len]+"\n>"+&R.to_string()+"_2\n"+&seq[tail..]+"\n";
-	        //bowtie_in
-	        //child_in.send(fas).unwrap();
+	        write!(bowtie_in, ">{}_1\t{:?}", R, &seq[..anchor_len]);
+            println!(">{:?}_1\t{:?}", R, &seq);
 	    }
     });
     
@@ -244,17 +242,13 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     // write and feed a tmpfile to bowtie maybe!?
     //write!(bowtie_stdin, "{:?}", child_out.recv().unwrap());
 
-     /*let mut bowtie_out = String::new();
-       match bowtie.stdout.unwrap().read_to_string(&mut bowtie_out) {
+     let mut bowtie_results = String::new();
+       match bowtie_out.read_to_string(&mut bowtie_results) {
            Err(why) => panic!("bowtie not running!"),
            Ok(_) => print!("bowtie worked!"),
-       }*/
+       }
 
-    for l in bowtie_out.lines() {
-    	let line = l.unwrap();
-        println!("Bowtie output:");
-        println!("{}", line);
-    }
+    println!(" There are {} lines\t", bowtie_results);
 
     // match fas.stdin.unwrap().write_all(samres.as_bytes()) {
     //     Err(why) => panic!("samtools results not reaching fasta"),
