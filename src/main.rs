@@ -5,10 +5,12 @@
 use std::env;
 use std::mem;
 use std::thread;
-use std::sync::mpsc;
+use std::sync::Arc;
 use std::path::Path;
 use std::io::prelude::*;
 use std::fs;
+use std::os::unix::io::AsRawFd;
+use std::os::unix::io::FromRawFd;
 use std::fs::File;
 use std::process::{Command, Stdio};
 use std::collections::HashMap;
@@ -72,7 +74,6 @@ fn main() {
   if let ("detect", Some(detect)) = matches.subcommand() {
       let bam_file = String::from(detect.value_of("bam_file").unwrap());
       let genome   = String::from(detect.value_of("genome").unwrap());
-      let out_prefix  = String::from(detect.value_of("out_prefix").unwrap());
 
       if detect.is_present("anchor-len") {
           anchor_len = detect.value_of("anchor-len").unwrap().parse().unwrap();
@@ -81,20 +82,8 @@ fn main() {
       if detect.is_present("orientation") {
           orientation = String::from(detect.value_of("orientation").unwrap());
       }
-      //detect_discordant_pairs(bam_file, out_prefix, max_frag_len, min_mapq, orientation);
-      detect_discordant_reads(bam_file, genome, out_prefix, anchor_len);
+      detect_discordant_reads(bam_file, genome, anchor_len);
   }
-
-  //arguments from detectspecific subcommand
-  if let ("detectspecific", Some(detectspecific)) = matches.subcommand() {
-      let bam_file = String::from(detectspecific.value_of("bam_file").unwrap());
-      let genome   = String::from(detectspecific.value_of("genome").unwrap());
-      let out_prefix  = String::from(detectspecific.value_of("out_prefix").unwrap());
-      let donors  = String::from(detectspecific.value_of("donors").unwrap());
-      let acceptors  = String::from(detectspecific.value_of("acceptors").unwrap());
-  }
-
-  println!("Hello, world!");
 }
 
 
@@ -210,31 +199,26 @@ fn main() {
 // }
 
 
-fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: String, anchor_len: usize) {
+fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: usize) {
 
-    println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
-
-    println!("{:?}\t{:?}\t{:?}\t", &sam_path, &anchor_len, &genome_path);
-
-    println!("Reading reference genome into memory...");
-	//let fastq = bio::io::fasta::Reader::from_file("/home/annalam/homo_sapiens/hg38.fa").unwrap();
-	let fastq = bio::io::fasta::Reader::from_file("/home/gnanavel/tools/homo_sapiens/hg38.fa").unwrap();
+	let fastq = bio::io::fasta::Reader::from_file(format!("{}.fa", genome_path)).unwrap();
+	println!("Reading reference genome into memory...");
 	let mut genome = HashMap::new();
 	for entry in fastq.records() {
 		let chr = entry.unwrap();
 		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
 	}
 
+    println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
+
     let mut bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped())
         .spawn().unwrap();
-    
-    let mut bowtie_in = bowtie.stdin.as_mut().unwrap();
-    let bowtie_out = BufReader::new(bowtie.stdout.unwrap());
 
-    //let (child_in, child_out)= mpsc::channel();
-    
+	let mut bowtie_in = unsafe { File::from_raw_fd(bowtie.stdin.unwrap().as_raw_fd()) };
+	let mut bowtie_out = unsafe { BufReader::new(File::from_raw_fd(bowtie.stdout.unwrap().as_raw_fd())) };
+
 	thread::spawn(move || {
 		let bam = bam::Reader::from_path(&sam_path).unwrap();
 		let mut R = 0;
@@ -254,8 +238,6 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
 	    }
     });
     
-
-
     //println!("{}", child_out.recv().unwrap());
     //TODO: bowtie is not recognizing fata format
     // check the formatting
