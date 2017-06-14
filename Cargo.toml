@@ -7,3 +7,6 @@ authors = ["Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
 clap = "*"
 bio = "*"
 rust-htslib = "*"
+regex = "0.2"
+subprocess= "*"
+shells = "*"
