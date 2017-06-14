@@ -225,7 +225,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, out_prefix: St
 		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
 	}
 
-    let bowtie = Command::new("bowtie")
+    let mut bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped())
         .spawn().unwrap();
