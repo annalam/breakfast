@@ -221,9 +221,11 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
 
     let mut bowtie = Command::new("bowtie")
-		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "-r", "--suppress", "5,6,7,8", &genome_path, "-"])
+		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped())
-        .spawn().unwrap();
+        .spawn().unwrap_or_else(|e| {
+            panic!("Bowtie failed running!");    
+        });
 
 	let mut bowtie_in = unsafe { File::from_raw_fd(bowtie.stdin.unwrap().as_raw_fd()) };
 	let mut bowtie_out = unsafe { BufReader::new(File::from_raw_fd(bowtie.stdout.unwrap().as_raw_fd())) };
@@ -240,8 +242,8 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 	        R += 1;
 	        let seq = String::from_utf8(read.seq().as_bytes()).unwrap();
 	        //let tail = seq.len() - anchor_len;
-	        write!(bowtie_in, ">{}_1\t{:?}", R, &seq[..anchor_len]);
-            println!(">{:?}_1\t{:?}", R, &seq);
+	        write!(bowtie_in, ">{}_1\n{}", R, &seq[..anchor_len]);
+            println!(">{:?}_1\n{}", R, &seq);
 	    }
     });
     
