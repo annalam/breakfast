@@ -11,6 +11,7 @@ use std::io::prelude::*;
 use std::fs;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
+use std::str;
 use std::fs::File;
 use std::process::{Command, Stdio};
 use std::collections::HashMap;
@@ -210,24 +211,22 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 
 fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: usize) {
 
-	let fastq = bio::io::fasta::Reader::from_file(format!("{}.fa", genome_path)).unwrap();
+	/*let fastq = bio::io::fasta::Reader::from_file(format!("{}.fa", genome_path)).unwrap();
 	println!("Reading reference genome into memory...");
 	let mut genome = HashMap::new();
 	for entry in fastq.records() {
 		let chr = entry.unwrap();
 		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
-	}
+	}*/
 
     println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
     let mut bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped())
-        .spawn().unwrap_or_else(|e| {
-            panic!("Bowtie failed running!");    
-        });
+        .spawn().unwrap();
 
-	let mut bowtie_in  = unsafe { File::from_raw_fd(bowtie.stdin.unwrap().as_raw_fd()) };
-	let mut bowtie_out = unsafe { BufReader::new(File::from_raw_fd(bowtie.stdout.unwrap().as_raw_fd())) };
+	let mut bowtie_in = bowtie.stdin.unwrap();
+	let mut bowtie_out = BufReader::new(bowtie.stdout.unwrap());
 
 	thread::spawn(move || {
 		let bam = bam::Reader::from_path(&sam_path).unwrap();
@@ -239,36 +238,22 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			// TODO: Extract anchors from both ends of read and write in
 			// interleaved FASTA format to the stdin of Bowtie.
 	        R += 1;
-	        let seq = String::from_utf8(read.seq().as_bytes()).unwrap();
+	        let seq = read.seq().as_bytes();
 	        //let tail = seq.len() - anchor_len;
-	        write!(bowtie_in, ">{}_1\n{}", R, &seq[..anchor_len].to_string());
-         //   println!(">{:?}_1\n{}", R, &seq[..anchor_len].to_string());
+        write!(bowtie_in, ">{}_1\n{}", R, unsafe { str::from_utf8_unchecked(&seq[..anchor_len]) });
 	    }
     });
-    
-    //println!("{}", child_out.recv().unwrap());
-    //TODO: bowtie is not recognizing fata format
-    // check the formatting
-    // write and feed a tmpfile to bowtie maybe!?
-    //write!(bowtie_stdin, "{:?}", child_out.recv().unwrap());
-    
-    let mut bowtie_results = String::new();
-       match bowtie_out.read_to_string(&mut bowtie_results) {
-           Err(why) => panic!("bowtie not running!"),
-           Ok(_) => print!("bowtie worked!"),
-       }
+
+      let mut bowtie_results = String::new();
+           match bowtie_out.read_to_string(&mut bowtie_results) {
+               Err(why) => panic!("bowtie not running!"),
+               Ok(_) => print!("bowtie worked!"),
+           }
 
     println!(" There are {} lines\t", bowtie_results);
-    
-    // match fas.stdin.unwrap().write_all(samres.as_bytes()) {
-    //     Err(why) => panic!("samtools results not reaching fasta"),
-    //     Ok(_) => print!("fasta recvied input from samtools"),
-    // }
 
-    // let mut res = String::new();
-    //   match fas.stdout.unwrap().read_to_string(&mut res) {
-    //       Err(why) => panic!("fasta not running!"),
-    //       Ok(_) => print!("fasta subcommand worked!"),
-    //   }
-    //   println!("{:?}", res.len());
+    for l in bowtie_out.lines() {
+		let line = l.unwrap();
+		println!("{}", line);
+	}
 }
