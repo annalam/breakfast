@@ -3,7 +3,7 @@
 // based on RNA-seq data.
 
 use std::env;
-use std::mem;
+use std::mem::swap;
 use std::thread;
 use std::sync::Arc;
 use std::path::Path;
@@ -29,6 +29,8 @@ extern crate regex;
 extern crate shells;
 
 use subprocess::{Exec, Popen, PopenConfig, Redirection};
+use bio::alphabets;
+use bio::alphabets::dna::alphabet;
 use regex::Regex;
 
 mod cli;
@@ -156,10 +158,10 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 
       if orientation == "fr" {
         if chr > mchr || (chr == mchr && pos > mpos) {
-          mem::swap(&mut chr, &mut mchr);
-          mem::swap(&mut pos, &mut mpos);
-          mem::swap(&mut rlen, &mut mrlen);
-          mem::swap(&mut strand, &mut mstrand);
+          	swap(&mut chr, &mut mchr);
+          	swap(&mut pos, &mut mpos);
+          	swap(&mut rlen, &mut mrlen);
+          	swap(&mut strand, &mut mstrand);
         }
         if mstrand == '+' { mstrand = '-';}
         else { mstrand = '+'; }
@@ -167,10 +169,10 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 
       else if orientation == "rf" {
         if chr > mchr || (chr == mchr && pos > mpos) {
-          mem::swap(&mut chr, &mut mchr);
-          mem::swap(&mut pos, &mut mpos);
-          mem::swap(&mut rlen, &mut mrlen);
-          mem::swap(&mut strand, &mut mstrand);
+          	swap(&mut chr, &mut mchr);
+          	swap(&mut pos, &mut mpos);
+          	swap(&mut rlen, &mut mrlen);
+          	swap(&mut strand, &mut mstrand);
         }
         if strand == '+' { strand = '-';}
         else { strand = '+'; }
@@ -178,13 +180,13 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 
       else if orientation == "ff" {
         if chr > mchr || (chr == mchr && pos > mpos) {
-          mem::swap(&mut chr, &mut mchr);
-          mem::swap(&mut pos, &mut mpos);
-          mem::swap(&mut rlen, &mut mrlen);
+          	swap(&mut chr, &mut mchr);
+          	swap(&mut pos, &mut mpos);
+          	swap(&mut rlen, &mut mrlen);
 
           if mstrand == '-' { mstrand = '+';} else { mstrand = '-'; }
           if strand  == '-' { strand  = '+';} else { strand  = '-'; }
-          mem::swap(&mut strand, &mut mstrand);
+          	swap(&mut strand, &mut mstrand);
         }
       } else { panic!("Unsupported read orientation detected."); }
 
@@ -211,16 +213,16 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 
 fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: usize) {
 
-	/*let fastq = bio::io::fasta::Reader::from_file(format!("{}.fa", genome_path)).unwrap();
+	let fastq = bio::io::fasta::Reader::from_file(format!("{}.fa", genome_path)).unwrap();
 	println!("Reading reference genome into memory...");
+
 	let mut genome = HashMap::new();
 	for entry in fastq.records() {
 		let chr = entry.unwrap();
-		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
-	}*/
+		genome.insert(chr.id()/*.unwrap()*/.to_owned(), chr.seq().to_owned());
+	}
 
     println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
-
     let mut bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped())
@@ -239,16 +241,52 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			// TODO: Extract anchors from both ends of read and write in
 			// interleaved FASTA format to the stdin of Bowtie.
 	        R += 1;
-	        //println!("{:?}", read.seq().as_bytes());
-	        let seq = read.seq().as_bytes();
-	        //let seq = str::from_utf8(read.seq().as_bytes().as_slice()).unwrap();
-	        //let tail = seq.len() - anchor_len;
-	        write!(bowtie_in, ">{}_1\n{}", R, unsafe { str::from_utf8_unchecked(&seq[..anchor_len]) });
+	    let seq = read.seq().as_bytes();
+	    let tail = seq.len() - anchor_len;
+        write!(bowtie_in, ">{}/1_{}\n{}\n>{}/2_{}\n{}", R, unsafe { str::from_utf8_unchecked(&seq)}, unsafe { str::from_utf8_unchecked(&seq[..anchor_len])}, R, unsafe { str::from_utf8_unchecked(&seq)}, unsafe { str::from_utf8_unchecked(&seq[tail..]) });
 	    }
     });
 
-	for l in bowtie_out.lines() {
-		let line = l.unwrap();
-		println!("{}", line);
-	}
+
+    let mut evidence: Vec<Evidence> = Vec::new();
+    //let mut prev : Vec<&str> = Vec::new();
+
+    for line in bowtie_out.lines() {
+        let ln = line.unwrap();
+        let cols: Vec<&str> = ln.split('\t').collect();
+        let mut prev : Vec<&str> = Vec::new();
+        if prev.is_empty() { prev = cols.clone(); }
+
+        let mut frag_id = cols[1];
+        let mut chr = prev[2]; let mut mchr = cols[2];
+        let mut strand  = prev[1] == "+";
+        let mut mstrand = cols[1] == "+";
+
+        let mut pos:  usize  = cols[3].parse().unwrap();
+        let mut mpos: usize  = prev[3].parse().unwrap();
+        let mut sqtmp: Vec<&str> = prev[0].split('_').collect();
+        let mut seq  = sqtmp[1];
+        let full_len: usize = seq.len();
+        
+        if chr == mchr && (pos - mpos) < (full_len - anchor_len) + 10 { continue; }
+        
+	 	// skip mitochondria
+	 	if chr.contains("chrM") || mchr.contains("chrM") { continue;}
+        
+        
+        if chr > mchr || (chr == mchr && pos > mpos) {
+        	swap(&mut chr, &mut mchr);
+        	swap(&mut pos, &mut mpos);
+          	if mstrand == false { mstrand = true ;} else { mstrand = false ; }
+          	if strand  == false { strand  = true ;} else { strand  = false ; }
+          	swap(&mut strand, &mut mstrand);
+        
+        	let seq = String::from_utf8(bio::alphabets::dna::revcomp(seq.as_bytes())).unwrap();
+        	println!("Reverse\t:{:?}", seq);
+        }
+        
+        // If the read is at the very edge of a chromosome, ignore it.
+		if (pos + full_len ) >= genome[chr].len() { continue; } 
+		if (mpos + full_len) >= genome[mchr].len(){ continue; }
+     }
 }
