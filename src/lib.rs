@@ -4,7 +4,9 @@ use std::path::Path;
 use std::fs::File;
 use std::process::Command;
 use std::io::{BufReader, BufRead};
+use bio::io::fastq;
 
+extern crate bio;
 
 pub fn mkdir(path: &String) {
   if Path::new(path).exists(){
@@ -27,6 +29,12 @@ pub fn read_whole_file<T: Read>(mut f: T) -> String {
         content
 }
 
-pub fn shell_stdout() {
+pub fn fasta_split_interleaved() {
+    let fastq = bio::io::fasta::Reader::from_file("test.fa").unwrap();
+    for record in fastq.records() {
+        println!("{:?}", record.unwrap().seq());
+    }
 }
 
+pub fn shell_stdout() {
+}
