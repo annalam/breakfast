@@ -238,8 +238,8 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			let read = r.unwrap();
 			if read.is_unmapped() == false { continue; }
 			if read.seq().len() < anchor_len * 2 { continue; }
-			// TODO: Extract anchors from both ends of read and write in
-			// interleaved FASTA format to the stdin of Bowtie.
+			// TODO: Extract read id from BAM record and make proper fasta header
+			// TODO: repace R with the above created ID 
 	        R += 1;
 	    let seq = read.seq().as_bytes();
 	    let tail = seq.len() - anchor_len;
@@ -247,16 +247,16 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 	    }
     });
 
-
     let mut evidence: Vec<Evidence> = Vec::new();
-    //let mut prev : Vec<&str> = Vec::new();
+    let mut prev : Vec<&str> = Vec::new(); //TODO: keep lifetime of this vector inside for-loop
 
     for line in bowtie_out.lines() {
         let ln = line.unwrap();
         let cols: Vec<&str> = ln.split('\t').collect();
+		// TODO: lifetime error still occurs! 
         let mut prev : Vec<&str> = Vec::new();
-        if prev.is_empty() { prev = cols.clone(); }
-
+        if prev.is_empty() { prev = cols.to_owned(); }
+		
         let mut frag_id = cols[1];
         let mut chr = prev[2]; let mut mchr = cols[2];
         let mut strand  = prev[1] == "+";
@@ -268,12 +268,13 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
         let mut seq  = sqtmp[1];
         let full_len: usize = seq.len();
         
-        if chr == mchr && (pos - mpos) < (full_len - anchor_len) + 10 { continue; }
         
-	 	// skip mitochondria
-	 	if chr.contains("chrM") || mchr.contains("chrM") { continue;}
-        
-        
+        if chr == mchr && (pos - mpos) < (full_len - anchor_len) + 10 { /*continue;*/ }
+    
+       	// skip mitochondria
+	 	if chr.contains("chrM") || mchr.contains("chrM") { println!("Mitochondra...!"); continue; }
+
+		      
         if chr > mchr || (chr == mchr && pos > mpos) {
         	swap(&mut chr, &mut mchr);
         	swap(&mut pos, &mut mpos);
@@ -282,11 +283,91 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
           	swap(&mut strand, &mut mstrand);
         
         	let seq = String::from_utf8(bio::alphabets::dna::revcomp(seq.as_bytes())).unwrap();
-        	println!("Reverse\t:{:?}", seq);
+        	//println!("Reverse\t:{:?}", seq);
         }
         
         // If the read is at the very edge of a chromosome, ignore it.
 		if (pos + full_len ) >= genome[chr].len() { continue; } 
 		if (mpos + full_len) >= genome[mchr].len(){ continue; }
-     }
+		
+		let mut left_grch: String;
+		if strand == true {
+	 		left_grch = String::from_utf8(genome[chr][pos-1..pos+full_len-1].to_vec()).unwrap();
+	 	} else {
+	 		left_grch = String::from_utf8(bio::alphabets::dna::revcomp(&genome[chr][pos+anchor_len-full_len-1..pos+anchor_len-1])).unwrap();
+	 	}
+	 	
+	 	let mut right_grch: String;
+		if mstrand == true {
+	 		right_grch = String::from_utf8(genome[chr][mpos+anchor_len-full_len..pos+full_len-1].to_vec()).unwrap();
+	 	} else {
+	 		right_grch = String::from_utf8(bio::alphabets::dna::revcomp(&genome[chr][mpos-1..mpos+full_len-1])).unwrap();
+	 	}
+	 
+	 	
+	 	// Check that the read sequence is not too homologous on either side
+		// of the breakpoint.
+		let mut left_match: f32 = 0.0;
+	  	for k in full_len-anchor_len+1..full_len { 
+ 			if seq.chars().nth(k) == left_grch.chars().nth(k){ left_match += 1.0; }
+   		}
+  		left_match = left_match /anchor_len as f32;
+  		
+  		let mut right_match: f32 = 0.0;
+	  	for k in 1..anchor_len { 
+ 			if seq.chars().nth(k) == right_grch.chars().nth(k){ right_match += 1.0; }
+   		}
+  		right_match = right_match/anchor_len as f32;
+		let max_homology = 0.7;
+		
+		if left_match >= max_homology || right_match >= max_homology { continue; }
+		
+		
+		// Identify the breakpoint location that minimizes the number of
+		// nucleotide mismatches between the read and the breakpoint flanks.
+		let mut mismatches: Vec<usize> = vec![0; full_len - anchor_len + 1];
+//		println!("How mary can be there? {:?}", mismatches.capacity());	
+				
+		for k in 1..anchor_len+1 { if seq.chars().nth(k) != left_grch.chars().nth(k) {
+		mismatches[anchor_len] += 1; }}
+
+		for k in anchor_len..full_len+1 { if seq.chars().nth(k) != right_grch.chars().nth(k){
+		mismatches[anchor_len] += 1; }}
+		
+
+		for bp in anchor_len..full_len+1 - anchor_len {
+			let mut lmatch:usize = 0 ; let mut rmatch:usize = 0; 
+			if seq.chars().nth(bp) != left_grch.chars().nth(bp){ lmatch += 1; }
+			if seq.chars().nth(bp) !=right_grch.chars().nth(bp){ rmatch += 1; }
+			mismatches[bp] = mismatches[bp-1] + lmatch - rmatch;
+		
+		}
+		let mut bp = 0;
+		if !mismatches.is_empty() {
+			//mismatches = mismatches.sort();
+			bp = mismatches[0];
+			}
+	
+		println!("{:?} breakpoint", bp);	
+//		println!("How mary are there? {:?}", mismatches.len());	
+		
+    }
+ 	/* TEST VARAIBLES   
+    let chr = "chr7";
+    let seq  = "atcgtagtcgtacgtagctagatgctagatgctag";
+ 	let full_len = seq.len();
+ 	let pos = full_len / 4;
+ 	let left_grch = "atgctatcgtagtcgtacgtagctagatgctagatgctagacgtagctagat";
+  	let mut left_match = 0;
+  	for k in (full_len-anchor_len+1..full_len) { 
+ 		if seq.chars().nth(k) == left_grch.chars().nth(k){
+  			left_match += 1;
+  			println!("{:?}", seq.chars().nth(k).unwrap()); 
+  		}
+  	}
+  	left_match = left_match/anchor_len;
+ 	println!("{:?}", left_match); */
+ 	        
+ println!("End of function");    
+ println!("Hello World!");
 }
