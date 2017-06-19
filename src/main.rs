@@ -28,7 +28,7 @@ mod cli;
 // struct for having breakfast options
 struct BfOptions {
     anchor_len :    usize,
-    max_frag_len:   i32,
+    max_frag_len:   usize,
     min_mapq:       i32,
     orientation:    &'static str,
     all_reads:      bool,
@@ -60,7 +60,7 @@ fn main() {
                             freq_above: 0};
 
   let mut anchor_len: usize   = defaults.anchor_len;
-  let mut max_frag_len: i32 = defaults.max_frag_len;
+  let mut max_frag_len: usize = defaults.max_frag_len;
   let mut min_mapq: i32     = defaults.min_mapq;
   let mut orientation       = String::from(defaults.orientation);
   let mut all_reads: bool   = defaults.all_reads;
@@ -82,7 +82,7 @@ fn main() {
       if detect.is_present("orientation") {
           orientation = String::from(detect.value_of("orientation").unwrap());
       }
-      detect_discordant_reads(bam_file, genome, anchor_len);
+      detect_discordant_reads(bam_file, genome, anchor_len, max_frag_len);
   }
 }
 
@@ -201,7 +201,7 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 */
 
 
-fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: usize) {
+fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: usize, max_frag_len: usize) {
 
 	let fastq = bio::io::fasta::Reader::from_file(format!("{}.fa", genome_path)).unwrap();
 	println!("Reading reference genome into memory...");
@@ -360,10 +360,27 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     	else { Ordering::Equal });
 
     println!("Identifying rearrangements based on clusters of discordant reads...");
-    for e in evidence {
-    	println!("{}\t{}\t{}\t{}\t{}\t{}\t{}",
-    		e.chr, if e.strand { '+' } else { '-' }, e.pos,
-    		e.mchr, if e.mstrand { '+' } else { '-' }, e.mpos,
-    		String::from_utf8(e.sequence).unwrap());
-    }
+    let mut reported = vec![false; evidence.len()];
+    for (e, read) in evidence.iter().enumerate() {
+    	if reported[e] { continue; }
+    	let mut cluster = vec![read];
+    	for s in e+1..evidence.len() {
+    		if evidence[s].chr != read.chr { break; }
+    		if evidence[s].pos - read.pos > max_frag_len { break; }
+    		if evidence[s].mchr != read.mchr { continue; }
+    		if (evidence[s].mpos as i64 - read.mpos as i64).abs() > max_frag_len as i64 { continue; }
+    		if evidence[s].strand != read.strand { continue; }
+    		if evidence[s].mstrand != read.mstrand { continue; }
+    		cluster.push(&evidence[s]);
+    		reported[s] = true;
+    	}
+    	if cluster.len() < 2 { continue; }
+
+    	print!("{}\t{}\t{}\t{}\t{}\t{}\t",
+    		read.chr, if read.strand { '+' } else { '-' }, read.pos,
+    		read.mchr, if read.mstrand { '+' } else { '-' }, read.mpos);
+    	print!("{}", str::from_utf8(cluster[0].sequence.as_slice()).unwrap());
+    	for r in 1..cluster.len() { print!(";{}", str::from_utf8(cluster[r].sequence.as_slice()).unwrap()); }
+    	println!();
+	}
 }
