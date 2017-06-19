@@ -12,6 +12,7 @@ use std::fs::File;
 use std::process::{Command, Stdio};
 use std::collections::HashMap;
 use std::ascii::AsciiExt;
+use std::cmp::Ordering;
 use std::io::{BufReader, BufWriter, BufRead, Read, Write};
 use rust_htslib::bam;
 use rust_htslib::bam::Read as HTSRead;
@@ -339,14 +340,29 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			junction[k+1] = if seq[k] == right_grch[k] { seq[k] } else { seq[k].to_ascii_lowercase() };
 		}
 
-		let signature = &junction[bp-5..bp+5];
+		let signature = junction[bp-5..bp+5].to_vec();
 
 		evidence.push(Evidence {
 			chr: chr.to_string(), pos: pos, strand: strand,
 			mchr: mchr.to_string(), mpos: mpos, mstrand: mstrand,
-			sequence: seq, frag_id: frag_id.to_string(),
-			signature: signature.to_vec() });
+			sequence: junction, frag_id: frag_id.to_string(),
+			signature: signature });
     }
 
     println!("Found {} rearrangement supporting reads.", evidence.len());
+
+    println!("Sorting rearrangement supporting reads by position...");
+    evidence.sort_by(|a,b|
+    	if a.chr < b.chr { Ordering::Less }
+    	else if a.chr > b.chr { Ordering::Greater }
+    	else if a.pos < b.pos { Ordering::Less }
+    	else if a.pos > b.pos { Ordering::Greater }
+    	else { Ordering::Equal });
+
+    println!("Identifying rearrangements based on clusters of discordant reads...");
+    for e in evidence {
+    	println!("{}\t{}\t{}\t{}\t{}\t{}",
+    		e.chr, if e.strand { '+' } else { '-' }, e.pos,
+    		e.mchr, if e.mstrand { '+' } else { '-' }, e.mpos);
+    }
 }
