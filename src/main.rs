@@ -361,8 +361,9 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 
     println!("Identifying rearrangements based on clusters of discordant reads...");
     for e in evidence {
-    	println!("{}\t{}\t{}\t{}\t{}\t{}",
+    	println!("{}\t{}\t{}\t{}\t{}\t{}\t{}",
     		e.chr, if e.strand { '+' } else { '-' }, e.pos,
-    		e.mchr, if e.mstrand { '+' } else { '-' }, e.mpos);
+    		e.mchr, if e.mstrand { '+' } else { '-' }, e.mpos,
+    		String::from_utf8(e.sequence).unwrap());
     }
 }
