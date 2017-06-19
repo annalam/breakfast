@@ -286,7 +286,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		};
 
 	 	let right_grch = if strand == true {
-	 		genome[mchr][mpos+anchor_len-full_len..mpos+full_len-1].to_vec()
+	 		genome[mchr][mpos+anchor_len-full_len-1..mpos+anchor_len-1].to_vec()
 	 	} else {
 	 		dna::revcomp(&genome[mchr][mpos-1..mpos+full_len-1].to_vec())
 	 	};
