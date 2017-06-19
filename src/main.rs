@@ -309,28 +309,26 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 				
 		// Identify the breakpoint location that minimizes the number of
 		// nucleotide mismatches between the read and the breakpoint flanks.
-		let mut mismatches: Vec<usize> = vec![0; full_len];
-		
+		let mut mismatches: Vec<usize> = vec![usize::max_value(); full_len];
 		for k in 0..anchor_len {
 			mismatches[anchor_len] += (seq[k] != left_grch[k]) as usize;
 		}
 		for k in anchor_len..full_len {
 			mismatches[anchor_len] += (seq[k] != right_grch[k]) as usize;
 		}
+		for k in anchor_len+1..full_len {
+			mismatches[k] = mismatches[k-1] +
+				(seq[k] != left_grch[k]) as usize +
+				(seq[k] != right_grch[k]) as usize;
+		}
+		let mut bp = 0;
+		let mut least_mismatches = mismatches[0];
+		for k in 1..full_len {
+			if mismatches[k] < least_mismatches {
+				bp = k; least_mismatches = mismatches[k];
+			}
+		}
 
-		for bp in anchor_len+1..full_len {
-			mismatches[bp] = mismatches[bp-1] +
-				(seq[bp] != left_grch[bp]) as usize +
-				(seq[bp] != right_grch[bp]) as usize;
-		}
-		/*let mut bp = 0;
-		if !mismatches.is_empty() {
-			//mismatches = mismatches.sort();
-			bp = mismatches[0];
-		}
-	
-		println!("{:?} breakpoint", bp);*/
-		
 		evidence.push(Evidence {
 			chr: chr.to_string(), pos: pos, strand: strand,
 			mchr: mchr.to_string(), mpos: mpos, mstrand: mstrand,
