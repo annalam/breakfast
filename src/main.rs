@@ -15,7 +15,7 @@ use std::str;
 use std::fs::File;
 use std::process::{Command, Stdio};
 use std::collections::HashMap;
-use std::io::{BufReader, BufRead, Read, Write};
+use std::io::{BufReader, BufWriter, BufRead, Read, Write};
 use rust_htslib::bam;
 use rust_htslib::bam::Read as HTSRead;
 
@@ -219,7 +219,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 	let mut genome = HashMap::new();
 	for entry in fastq.records() {
 		let chr = entry.unwrap();
-		genome.insert(chr.id()/*.unwrap()*/.to_owned(), chr.seq().to_owned());
+		genome.insert(chr.id().unwrap().to_owned(), chr.seq());
 	}
 
     println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
@@ -228,94 +228,93 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
         .stdin(Stdio::piped()).stdout(Stdio::piped())
         .spawn().unwrap();
 
-	let mut bowtie_in = bowtie.stdin.unwrap();
+	let mut bowtie_in = BufWriter::new(bowtie.stdin.unwrap());
 	let mut bowtie_out = BufReader::new(bowtie.stdout.unwrap());
 
 	thread::spawn(move || {
 		let bam = bam::Reader::from_path(&sam_path).unwrap();
-		let mut R = 0;
 		for r in bam.records() {
 			let read = r.unwrap();
 			if read.is_unmapped() == false { continue; }
 			if read.seq().len() < anchor_len * 2 { continue; }
-			// TODO: Extract read id from BAM record and make proper fasta header
-			// TODO: repace R with the above created ID 
-	        R += 1;
-	    let seq = read.seq().as_bytes();
-	    let tail = seq.len() - anchor_len;
-        write!(bowtie_in, ">{}/1_{}\n{}\n>{}/2_{}\n{}", R, unsafe { str::from_utf8_unchecked(&seq)}, unsafe { str::from_utf8_unchecked(&seq[..anchor_len])}, R, unsafe { str::from_utf8_unchecked(&seq)}, unsafe { str::from_utf8_unchecked(&seq[tail..]) });
+			let read_id = str::from_utf8(read.qname()).unwrap();
+			let seq = read.seq().as_bytes();
+			let tail = seq.len() - anchor_len;
+			write!(bowtie_in, ">{}#1\n{}\n>{}#{}\n{}", &read_id, str::from_utf8(&seq[..anchor_len]).unwrap(), &read_id, str::from_utf8(&seq).unwrap(), str::from_utf8(&seq[tail..]).unwrap());
 	    }
     });
 
     let mut evidence: Vec<Evidence> = Vec::new();
-    let mut prev : Vec<&str> = Vec::new(); //TODO: keep lifetime of this vector inside for-loop
+    let mut prev: String = String::new();
 
-    for line in bowtie_out.lines() {
-        let ln = line.unwrap();
-        let cols: Vec<&str> = ln.split('\t').collect();
-		// TODO: lifetime error still occurs! 
-        let mut prev : Vec<&str> = Vec::new();
-        if prev.is_empty() { prev = cols.to_owned(); }
-		
-        let mut frag_id = cols[1];
-        let mut chr = prev[2]; let mut mchr = cols[2];
-        let mut strand  = prev[1] == "+";
-        let mut mstrand = cols[1] == "+";
+    for l in bowtie_out.lines() {
+        let line = l.unwrap();
+        let anchor_info = line.split('\t').next().unwrap().to_owned();
+        if anchor_info.ends_with("#1") {
+        	prev = line;
+        	continue;
+        } else if prev.is_empty() {
+        	continue;
+        }
 
-        let mut pos:  usize  = cols[3].parse().unwrap();
-        let mut mpos: usize  = prev[3].parse().unwrap();
-        let mut sqtmp: Vec<&str> = prev[0].split('_').collect();
-        let mut seq  = sqtmp[1];
+        let frag_id = anchor_info.split('#').next().unwrap();
+        if !prev.starts_with(frag_id) { continue; }
+
+        let mut cols = prev.split('\t');
+        let mut mcols = line.split('\t');
+        cols.next(); mcols.next();   // Skip first column
+
+        let mut strand = cols.next().unwrap() == "+";
+        let mut mstrand = mcols.next().unwrap() == "+";
+        let mut chr = cols.next().unwrap();
+        let mut mchr = mcols.next().unwrap();
+        let mut pos: usize = cols.next().unwrap().parse().unwrap();
+        let mut mpos: usize = mcols.next().unwrap().parse().unwrap();
+        let mut seq: Vec<u8> = anchor_info.split('#').last().unwrap().as_bytes().to_vec();
         let full_len: usize = seq.len();
-        
-        
-        if chr == mchr && (pos - mpos) < (full_len - anchor_len) + 10 { /*continue;*/ }
-    
-       	// skip mitochondria
-	 	if chr.contains("chrM") || mchr.contains("chrM") { println!("Mitochondra...!"); continue; }
+            
+       	// Do not report rearrangements involving mitochondrial DNA
+	 	if chr.contains('M') || mchr.contains('M') { continue; }
 
-		      
         if chr > mchr || (chr == mchr && pos > mpos) {
         	swap(&mut chr, &mut mchr);
         	swap(&mut pos, &mut mpos);
           	if mstrand == false { mstrand = true ;} else { mstrand = false ; }
           	if strand  == false { strand  = true ;} else { strand  = false ; }
           	swap(&mut strand, &mut mstrand);
-        
-        	let seq = String::from_utf8(bio::alphabets::dna::revcomp(seq.as_bytes())).unwrap();
-        	//println!("Reverse\t:{:?}", seq);
+        	seq = bio::alphabets::dna::revcomp(seq);
         }
         
         // If the read is at the very edge of a chromosome, ignore it.
-		if (pos + full_len ) >= genome[chr].len() { continue; } 
-		if (mpos + full_len) >= genome[mchr].len(){ continue; }
-		
-		let mut left_grch: String;
-		if strand == true {
-	 		left_grch = String::from_utf8(genome[chr][pos-1..pos+full_len-1].to_vec()).unwrap();
+		if pos + full_len >= genome[chr].len() { continue; } 
+		if mpos + full_len >= genome[mchr].len() { continue; }
+
+		let left_grch = if strand == true {
+			genome[chr][pos-1..pos+full_len-1].to_vec()
+		} else {
+			bio::alphabets::dna::revcomp(&genome[chr][pos+anchor_len-full_len-1..pos+anchor_len-1].to_vec())
+		};
+
+	 	continue;
+
+	 	let right_grch = if strand == true {
+	 		genome[chr][mpos+anchor_len-full_len..pos+full_len-1].to_vec()
 	 	} else {
-	 		left_grch = String::from_utf8(bio::alphabets::dna::revcomp(&genome[chr][pos+anchor_len-full_len-1..pos+anchor_len-1])).unwrap();
-	 	}
-	 	
-	 	let mut right_grch: String;
-		if mstrand == true {
-	 		right_grch = String::from_utf8(genome[chr][mpos+anchor_len-full_len..pos+full_len-1].to_vec()).unwrap();
-	 	} else {
-	 		right_grch = String::from_utf8(bio::alphabets::dna::revcomp(&genome[chr][mpos-1..mpos+full_len-1])).unwrap();
-	 	}
+	 		bio::alphabets::dna::revcomp(&genome[chr][mpos-1..mpos+full_len-1].to_vec())
+	 	};
 	 
 	 	
 	 	// Check that the read sequence is not too homologous on either side
 		// of the breakpoint.
 		let mut left_match: f32 = 0.0;
 	  	for k in full_len-anchor_len+1..full_len { 
- 			if seq.chars().nth(k) == left_grch.chars().nth(k){ left_match += 1.0; }
+ 			if seq[k] == left_grch[k]{ left_match += 1.0; }
    		}
   		left_match = left_match /anchor_len as f32;
   		
   		let mut right_match: f32 = 0.0;
 	  	for k in 1..anchor_len { 
- 			if seq.chars().nth(k) == right_grch.chars().nth(k){ right_match += 1.0; }
+ 			if seq[k] == right_grch[k]{ right_match += 1.0; }
    		}
   		right_match = right_match/anchor_len as f32;
 		let max_homology = 0.7;
@@ -328,17 +327,17 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		let mut mismatches: Vec<usize> = vec![0; full_len - anchor_len + 1];
 //		println!("How mary can be there? {:?}", mismatches.capacity());	
 				
-		for k in 1..anchor_len+1 { if seq.chars().nth(k) != left_grch.chars().nth(k) {
+		for k in 1..anchor_len+1 { if seq[k] != left_grch[k] {
 		mismatches[anchor_len] += 1; }}
 
-		for k in anchor_len..full_len+1 { if seq.chars().nth(k) != right_grch.chars().nth(k){
+		for k in anchor_len..full_len+1 { if seq[k] != right_grch[k]{
 		mismatches[anchor_len] += 1; }}
 		
 
 		for bp in anchor_len..full_len+1 - anchor_len {
 			let mut lmatch:usize = 0 ; let mut rmatch:usize = 0; 
-			if seq.chars().nth(bp) != left_grch.chars().nth(bp){ lmatch += 1; }
-			if seq.chars().nth(bp) !=right_grch.chars().nth(bp){ rmatch += 1; }
+			if seq[bp] != left_grch[bp]{ lmatch += 1; }
+			if seq[bp] !=right_grch[bp]{ rmatch += 1; }
 			mismatches[bp] = mismatches[bp-1] + lmatch - rmatch;
 		
 		}
@@ -367,7 +366,4 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
   	}
   	left_match = left_match/anchor_len;
  	println!("{:?}", left_match); */
- 	        
- println!("End of function");    
- println!("Hello World!");
 }
