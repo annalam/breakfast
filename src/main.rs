@@ -10,10 +10,10 @@ use std::fs;
 use std::str;
 use std::fs::File;
 use std::process::{Command, Stdio};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ascii::AsciiExt;
 use std::cmp::Ordering;
-use std::io::{BufReader, BufWriter, BufRead, Read, Write};
+use std::io::{BufReader, BufWriter, BufRead, Read, Write, stderr};
 use rust_htslib::bam;
 use rust_htslib::bam::Read as HTSRead;
 
@@ -68,20 +68,15 @@ fn main() {
   let mut min_reads     = String::from(defaults.min_reads);
   let mut freq_above: i32 = defaults.freq_above;
 
-  //arguments from src/cli.rs
   let matches = cli::build_cli().get_matches();
-  //arguments from detect subcommand
   if let ("detect", Some(detect)) = matches.subcommand() {
       let bam_file = String::from(detect.value_of("bam_file").unwrap());
-      let genome   = String::from(detect.value_of("genome").unwrap());
+      let genome = String::from(detect.value_of("genome").unwrap());
 
       if detect.is_present("anchor-len") {
           anchor_len = detect.value_of("anchor-len").unwrap().parse().unwrap();
       }
 
-      if detect.is_present("orientation") {
-          orientation = String::from(detect.value_of("orientation").unwrap());
-      }
       detect_discordant_reads(bam_file, genome, anchor_len, max_frag_len);
   }
 }
@@ -204,7 +199,8 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: usize, max_frag_len: usize) {
 
 	let fastq = bio::io::fasta::Reader::from_file(format!("{}.fa", genome_path)).unwrap();
-	println!("Reading reference genome into memory...");
+	writeln!(stderr(), "Reading reference genome into memory...");
+	// FIXME: Use eprintln!() once it stabilizes...
 
 	let mut genome = HashMap::new();
 	for entry in fastq.records() {
@@ -212,7 +208,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
 	}
 
-    println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
+    writeln!(stderr(), "Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
     let bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped())
@@ -347,9 +343,9 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			signature: signature });
     }
 
-    println!("Found {} rearrangement supporting reads.", evidence.len());
+    writeln!(stderr(), "Found {} rearrangement supporting reads.", evidence.len());
 
-    println!("Sorting rearrangement supporting reads by position...");
+    writeln!(stderr(), "Sorting rearrangement supporting reads by position...");
     evidence.sort_by(|a,b|
     	if a.chr < b.chr { Ordering::Less }
     	else if a.chr > b.chr { Ordering::Greater }
@@ -357,7 +353,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     	else if a.pos > b.pos { Ordering::Greater }
     	else { Ordering::Equal });
 
-    println!("Identifying rearrangements based on clusters of discordant reads...");
+    writeln!(stderr(), "Identifying rearrangements based on clusters of discordant reads...");
     let mut reported = vec![false; evidence.len()];
     for (e, read) in evidence.iter().enumerate() {
     	if reported[e] { continue; }
@@ -369,6 +365,14 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     		if (evidence[s].mpos as i64 - read.mpos as i64).abs() > max_frag_len as i64 { continue; }
     		if evidence[s].strand != read.strand { continue; }
     		if evidence[s].mstrand != read.mstrand { continue; }
+
+    		// Do not count multiple reads from the same DNA fragment
+    		// as independent sources of evidence.
+    		if cluster.iter().any(|r| r.frag_id == read.frag_id) { continue; }
+
+			// Discard reads with identical start positions.
+			if cluster.iter().any(|r| r.pos == read.pos) { continue; }
+
     		cluster.push(&evidence[s]);
     		reported[s] = true;
     	}
@@ -377,8 +381,10 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     	print!("{}\t{}\t{}\t{}\t{}\t{}\t",
     		read.chr, if read.strand { '+' } else { '-' }, read.pos,
     		read.mchr, if read.mstrand { '+' } else { '-' }, read.mpos);
-    	print!("{}", str::from_utf8(cluster[0].sequence.as_slice()).unwrap());
-    	for r in 1..cluster.len() { print!(";{}", str::from_utf8(cluster[r].sequence.as_slice()).unwrap()); }
+    	for r in 0..cluster.len() {
+    		if r > 0 { print!(";"); }
+    		print!("{}", str::from_utf8(cluster[0].sequence.as_slice()).unwrap());
+    	}
     	println!();
 	}
 }
