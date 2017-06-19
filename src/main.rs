@@ -269,8 +269,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
         if chr > mchr || (chr == mchr && pos > mpos) {
         	swap(&mut chr, &mut mchr);
         	swap(&mut pos, &mut mpos);
-          	swap(&mut strand, &mut mstrand);
-          	strand = !strand; mstrand = !mstrand;
+        	let tmp = strand; strand = !mstrand; mstrand = !tmp;
         	seq = dna::revcomp(&seq);
         }
         
