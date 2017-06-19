@@ -11,6 +11,7 @@ use std::str;
 use std::fs::File;
 use std::process::{Command, Stdio};
 use std::collections::HashMap;
+use std::ascii::AsciiExt;
 use std::io::{BufReader, BufWriter, BufRead, Read, Write};
 use rust_htslib::bam;
 use rust_htslib::bam::Read as HTSRead;
@@ -44,7 +45,7 @@ struct Evidence {
 	mstrand: bool,
 	sequence: Vec<u8>,    // Full ASCII sequence of breakpoint overlapping read
 	frag_id: String,      // Identifier of the DNA fragment in the BAM file
-	signature: String     // Breakpoint signature (5 bp from both flanks)
+	signature: Vec<u8>    // Breakpoint signature (5 bp from both flanks)
 }
 
 fn main() {
@@ -329,10 +330,22 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			}
 		}
 
+		let mut junction: Vec<u8> = vec![' ' as u8; full_len + 1];
+		for k in 0..bp {
+			junction[k] = if seq[k] == left_grch[k] { seq[k] } else { seq[k].to_ascii_lowercase() };
+		}
+		junction[bp] = '|' as u8;
+		for k in bp..full_len {
+			junction[k+1] = if seq[k] == right_grch[k] { seq[k] } else { seq[k].to_ascii_lowercase() };
+		}
+
+		let signature = &junction[bp-5..bp+5];
+
 		evidence.push(Evidence {
 			chr: chr.to_string(), pos: pos, strand: strand,
 			mchr: mchr.to_string(), mpos: mpos, mstrand: mstrand,
-			sequence: seq, frag_id: frag_id.to_string(), signature: String::new() });
+			sequence: seq, frag_id: frag_id.to_string(),
+			signature: signature.to_vec() });
     }
 
     println!("Found {} rearrangement supporting reads.", evidence.len());
