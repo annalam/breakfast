@@ -219,7 +219,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 	let mut genome = HashMap::new();
 	for entry in fastq.records() {
 		let chr = entry.unwrap();
-		genome.insert(chr.id().unwrap().to_owned(), chr.seq());
+		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
 	}
 
     println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
@@ -282,7 +282,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
           	if mstrand == false { mstrand = true ;} else { mstrand = false ; }
           	if strand  == false { strand  = true ;} else { strand  = false ; }
           	swap(&mut strand, &mut mstrand);
-        	seq = bio::alphabets::dna::revcomp(seq);
+        	seq = bio::alphabets::dna::revcomp(&seq);
         }
         
         // If the read is at the very edge of a chromosome, ignore it.
@@ -295,7 +295,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			bio::alphabets::dna::revcomp(&genome[chr][pos+anchor_len-full_len-1..pos+anchor_len-1].to_vec())
 		};
 
-	 	continue;
+		continue;
 
 	 	let right_grch = if strand == true {
 	 		genome[chr][mpos+anchor_len-full_len..pos+full_len-1].to_vec()
@@ -303,10 +303,10 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 	 		bio::alphabets::dna::revcomp(&genome[chr][mpos-1..mpos+full_len-1].to_vec())
 	 	};
 	 
-	 	
+
 	 	// Check that the read sequence is not too homologous on either side
 		// of the breakpoint.
-		let mut left_match: f32 = 0.0;
+		/*let mut left_match: f32 = 0.0;
 	  	for k in full_len-anchor_len+1..full_len { 
  			if seq[k] == left_grch[k]{ left_match += 1.0; }
    		}
@@ -319,8 +319,9 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
   		right_match = right_match/anchor_len as f32;
 		let max_homology = 0.7;
 		
-		if left_match >= max_homology || right_match >= max_homology { continue; }
+		if left_match >= max_homology || right_match >= max_homology { continue; }*/
 		
+	 	continue;
 		
 		// Identify the breakpoint location that minimizes the number of
 		// nucleotide mismatches between the read and the breakpoint flanks.
