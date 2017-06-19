@@ -233,7 +233,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     });
 
     let mut evidence: Vec<Evidence> = Vec::new();
-    let mut prev: String = String::new();
+    let mut prev = String::new();
 
     for l in bowtie_out.lines() {
         let line = l.unwrap();
@@ -284,9 +284,9 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		};
 
 	 	let right_grch = if strand == true {
-	 		genome[chr][mpos+anchor_len-full_len..mpos+full_len-1].to_vec()
+	 		genome[mchr][mpos+anchor_len-full_len..mpos+full_len-1].to_vec()
 	 	} else {
-	 		dna::revcomp(&genome[chr][mpos-1..mpos+full_len-1].to_vec())
+	 		dna::revcomp(&genome[mchr][mpos-1..mpos+full_len-1].to_vec())
 	 	};
 	 
 
@@ -312,7 +312,6 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		// Identify the breakpoint location that minimizes the number of
 		// nucleotide mismatches between the read and the breakpoint flanks.
 		let mut mismatches: Vec<usize> = vec![0; full_len - anchor_len + 1];
-//		println!("How mary can be there? {:?}", mismatches.capacity());	
 				
 		for k in 1..anchor_len+1 { if seq[k] != left_grch[k] {
 		mismatches[anchor_len] += 1; }}
