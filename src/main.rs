@@ -2,15 +2,11 @@
 // BreakFast is a toolkit for detecting chromosomal rearrangements
 // based on RNA-seq data.
 
-use std::env;
 use std::mem::swap;
 use std::thread;
-use std::sync::Arc;
 use std::path::Path;
 use std::io::prelude::*;
 use std::fs;
-use std::os::unix::io::AsRawFd;
-use std::os::unix::io::FromRawFd;
 use std::str;
 use std::fs::File;
 use std::process::{Command, Stdio};
@@ -22,19 +18,10 @@ use rust_htslib::bam::Read as HTSRead;
 extern crate clap;
 extern crate bio;
 extern crate rust_htslib;
-extern crate subprocess;
-extern crate regex;
 
-#[macro_use]
-extern crate shells;
-
-use subprocess::{Exec, Popen, PopenConfig, Redirection};
-use bio::alphabets;
-use bio::alphabets::dna::alphabet;
-use regex::Regex;
+use bio::alphabets::dna;
 
 mod cli;
-mod lib;
 
 // struct for having breakfast options
 struct BfOptions {
@@ -55,9 +42,9 @@ struct Evidence {
 	mchr: String,
 	mpos: u32,
 	mstrand: bool,
-	sequence: String,
+	sequence: String,     // Full sequence of breakpoint overlapping read
 	frag_id: String,
-	signature: String     // Breakpoint signature
+	signature: String     // Breakpoint signature (5 bp from both flanks)
 }
 
 fn main() {
@@ -101,6 +88,7 @@ fn main() {
 // DETECT //
 //======= //
 
+/*
 fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i32,
 	min_mapq: i32, orientation: String) {
   println!("{:?}\t{:?}\t{:?}\t{:?}\t{:?}", sam_path, out_prefix, max_frag_len, min_mapq, orientation);
@@ -208,7 +196,7 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
     fs::remove_file(rm_tmp);
     println!("Found {:?} discordant mate pairs.", N);
 }
-
+*/
 
 
 fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: usize) {
@@ -282,7 +270,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
           	if mstrand == false { mstrand = true ;} else { mstrand = false ; }
           	if strand  == false { strand  = true ;} else { strand  = false ; }
           	swap(&mut strand, &mut mstrand);
-        	seq = bio::alphabets::dna::revcomp(&seq);
+        	seq = dna::revcomp(&seq);
         }
         
         // If the read is at the very edge of a chromosome, ignore it.
@@ -292,15 +280,13 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		let left_grch = if strand == true {
 			genome[chr][pos-1..pos+full_len-1].to_vec()
 		} else {
-			bio::alphabets::dna::revcomp(&genome[chr][pos+anchor_len-full_len-1..pos+anchor_len-1].to_vec())
+			dna::revcomp(&genome[chr][pos+anchor_len-full_len-1..pos+anchor_len-1].to_vec())
 		};
 
-		continue;
-
 	 	let right_grch = if strand == true {
-	 		genome[chr][mpos+anchor_len-full_len..pos+full_len-1].to_vec()
+	 		genome[chr][mpos+anchor_len-full_len..mpos+full_len-1].to_vec()
 	 	} else {
-	 		bio::alphabets::dna::revcomp(&genome[chr][mpos-1..mpos+full_len-1].to_vec())
+	 		dna::revcomp(&genome[chr][mpos-1..mpos+full_len-1].to_vec())
 	 	};
 	 
 
