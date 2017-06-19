@@ -306,19 +306,16 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		let max_homology = 0.7;
 		
 		if left_match >= max_homology || right_match >= max_homology { continue; }*/
-		
-	 	continue;
-		
+				
 		// Identify the breakpoint location that minimizes the number of
 		// nucleotide mismatches between the read and the breakpoint flanks.
-		let mut mismatches: Vec<usize> = vec![0; full_len - anchor_len + 1];
+		let mut mismatches: Vec<usize> = vec![0; full_len];
 				
-		for k in 1..anchor_len+1 { if seq[k] != left_grch[k] {
+		/*for k in 1..anchor_len+1 { if seq[k] != left_grch[k] {
 		mismatches[anchor_len] += 1; }}
 
 		for k in anchor_len..full_len+1 { if seq[k] != right_grch[k]{
 		mismatches[anchor_len] += 1; }}
-		
 
 		for bp in anchor_len..full_len+1 - anchor_len {
 			let mut lmatch:usize = 0 ; let mut rmatch:usize = 0; 
@@ -331,9 +328,9 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		if !mismatches.is_empty() {
 			//mismatches = mismatches.sort();
 			bp = mismatches[0];
-			}
+		}
 	
-		println!("{:?} breakpoint", bp);	
+		println!("{:?} breakpoint", bp);	*/
 //		println!("How mary are there? {:?}", mismatches.len());	
 		
 		evidence.push(Evidence {
@@ -341,4 +338,6 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			mchr: mchr.to_string(), mpos: mpos, mstrand: mstrand,
 			sequence: seq, frag_id: frag_id.to_string(), signature: String::new() });
     }
+
+    println!("Found {} rearrangement supporting reads.", evidence.len());
 }
