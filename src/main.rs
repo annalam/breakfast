@@ -211,7 +211,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 	}
 
     println!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
-    let mut bowtie = Command::new("bowtie")
+    let bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped())
         .spawn().unwrap();
@@ -310,28 +310,26 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		// Identify the breakpoint location that minimizes the number of
 		// nucleotide mismatches between the read and the breakpoint flanks.
 		let mut mismatches: Vec<usize> = vec![0; full_len];
-				
-		/*for k in 1..anchor_len+1 { if seq[k] != left_grch[k] {
-		mismatches[anchor_len] += 1; }}
-
-		for k in anchor_len..full_len+1 { if seq[k] != right_grch[k]{
-		mismatches[anchor_len] += 1; }}
-
-		for bp in anchor_len..full_len+1 - anchor_len {
-			let mut lmatch:usize = 0 ; let mut rmatch:usize = 0; 
-			if seq[bp] != left_grch[bp]{ lmatch += 1; }
-			if seq[bp] !=right_grch[bp]{ rmatch += 1; }
-			mismatches[bp] = mismatches[bp-1] + lmatch - rmatch;
 		
+		for k in 0..anchor_len {
+			mismatches[anchor_len] += (seq[k] != left_grch[k]) as usize;
 		}
-		let mut bp = 0;
+		for k in anchor_len..full_len {
+			mismatches[anchor_len] += (seq[k] != right_grch[k]) as usize;
+		}
+
+		for bp in anchor_len+1..full_len {
+			mismatches[bp] = mismatches[bp-1] +
+				(seq[bp] != left_grch[bp]) as usize +
+				(seq[bp] != right_grch[bp]) as usize;
+		}
+		/*let mut bp = 0;
 		if !mismatches.is_empty() {
 			//mismatches = mismatches.sort();
 			bp = mismatches[0];
 		}
 	
-		println!("{:?} breakpoint", bp);	*/
-//		println!("How mary are there? {:?}", mismatches.len());	
+		println!("{:?} breakpoint", bp);*/
 		
 		evidence.push(Evidence {
 			chr: chr.to_string(), pos: pos, strand: strand,
