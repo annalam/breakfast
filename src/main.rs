@@ -37,13 +37,13 @@ struct BfOptions {
 
 struct Evidence {
 	chr: String,
-	pos: u32,
+	pos: usize,
 	strand: bool,
 	mchr: String,
-	mpos: u32,
+	mpos: usize,
 	mstrand: bool,
-	sequence: String,     // Full sequence of breakpoint overlapping read
-	frag_id: String,
+	sequence: Vec<u8>,    // Full ASCII sequence of breakpoint overlapping read
+	frag_id: String,      // Identifier of the DNA fragment in the BAM file
 	signature: String     // Breakpoint signature (5 bp from both flanks)
 }
 
@@ -336,20 +336,9 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		println!("{:?} breakpoint", bp);	
 //		println!("How mary are there? {:?}", mismatches.len());	
 		
+		evidence.push(Evidence {
+			chr: chr.to_string(), pos: pos, strand: strand,
+			mchr: mchr.to_string(), mpos: mpos, mstrand: mstrand,
+			sequence: seq, frag_id: frag_id.to_string(), signature: String::new() });
     }
- 	/* TEST VARAIBLES   
-    let chr = "chr7";
-    let seq  = "atcgtagtcgtacgtagctagatgctagatgctag";
- 	let full_len = seq.len();
- 	let pos = full_len / 4;
- 	let left_grch = "atgctatcgtagtcgtacgtagctagatgctagatgctagacgtagctagat";
-  	let mut left_match = 0;
-  	for k in (full_len-anchor_len+1..full_len) { 
- 		if seq.chars().nth(k) == left_grch.chars().nth(k){
-  			left_match += 1;
-  			println!("{:?}", seq.chars().nth(k).unwrap()); 
-  		}
-  	}
-  	left_match = left_match/anchor_len;
- 	println!("{:?}", left_match); */
 }
