@@ -269,9 +269,8 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
         if chr > mchr || (chr == mchr && pos > mpos) {
         	swap(&mut chr, &mut mchr);
         	swap(&mut pos, &mut mpos);
-          	if mstrand == false { mstrand = true ;} else { mstrand = false ; }
-          	if strand  == false { strand  = true ;} else { strand  = false ; }
           	swap(&mut strand, &mut mstrand);
+          	strand = !strand; mstrand = !mstrand;
         	seq = dna::revcomp(&seq);
         }
         
@@ -285,7 +284,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			dna::revcomp(&genome[chr][pos+anchor_len-full_len-1..pos+anchor_len-1].to_vec())
 		};
 
-	 	let right_grch = if strand == true {
+	 	let right_grch = if mstrand == true {
 	 		genome[mchr][mpos+anchor_len-full_len-1..mpos+anchor_len-1].to_vec()
 	 	} else {
 	 		dna::revcomp(&genome[mchr][mpos-1..mpos+full_len-1].to_vec())
