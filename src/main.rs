@@ -205,7 +205,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 	let mut genome = HashMap::new();
 	for entry in fastq.records() {
 		let chr = entry.unwrap();
-		genome.insert(chr.id().unwrap().to_owned(), chr.seq().to_owned());
+		genome.insert(chr.id()/*.unwrap()*/.to_owned(), chr.seq().to_owned());
 	}
 
     writeln!(stderr(), "Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
