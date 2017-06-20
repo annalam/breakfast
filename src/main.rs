@@ -224,8 +224,9 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			if read.is_unmapped() == false { continue; }
 			if read.seq().len() < anchor_len * 2 { continue; }
 			let read_id = str::from_utf8(read.qname()).unwrap();
-			let seq = read.seq().as_bytes();
-			let tail = seq.len() - anchor_len;
+			let seq = if read.is_reverse() { read.seq().as_bytes() } 
+			else { 	dna::revcomp(&read.seq().as_bytes()) };
+	 		let tail = seq.len() - anchor_len;
 			write!(bowtie_in, ">{}#1\n{}\n>{}#{}\n{}", &read_id, str::from_utf8(&seq[..anchor_len]).unwrap(), &read_id, str::from_utf8(&seq).unwrap(), str::from_utf8(&seq[tail..]).unwrap());
 	    }
     });
