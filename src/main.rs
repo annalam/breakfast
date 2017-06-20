@@ -12,7 +12,7 @@ use std::fs::File;
 use std::process::{Command, Stdio};
 use std::collections::{HashMap, HashSet};
 use std::ascii::AsciiExt;
-use std::cmp::Ordering;
+use std::cmp::{min, max, Ordering};
 use std::io::{BufReader, BufWriter, BufRead, Read, Write, stderr};
 use rust_htslib::bam;
 use rust_htslib::bam::Read as HTSRead;
@@ -44,9 +44,10 @@ struct Evidence {
 	mchr: String,
 	mpos: usize,
 	mstrand: bool,
-	sequence: Vec<u8>,    // Full ASCII sequence of breakpoint overlapping read
-	frag_id: String,      // Identifier of the DNA fragment in the BAM file
-	signature: Vec<u8>    // Breakpoint signature (5 bp from both flanks)
+	sequence: Vec<u8>,     // Full sequence of breakpoint overlapping read
+	frag_id: String,       // Identifier of the DNA fragment in the BAM file
+	signature: Vec<u8>,    // Breakpoint signature (5 bp from both flanks)
+	frag_start_pos: usize  // Original DNA fragment boundary position
 }
 
 fn main() {
@@ -195,17 +196,76 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 }
 */
 
+fn remove_duplicate_evidence(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
+	let mut checked = vec![false; evidence.len()];
+	let mut filtered: Vec<&Evidence> = Vec::new();
+	for (e, read) in evidence.iter().enumerate() {
+		// If the read was already found to be a redundant source of evidence,
+		// we don't need to check for redundancy again.
+		if checked[e] { continue; }
+
+		// We consider two reads to be redundant sources of evidence for a
+		// genomic rearrangement if they come from the same original DNA
+		// fragment (e.g. two paired end mates from the same fragment).
+		// Also, we consider them to be redundant if they share the same
+		// start position (as in this case they likely arise from PCR or
+		// optical duplicates).
+		let mut todo_edges = vec![read.frag_start_pos];
+		let mut todo_frag_ids = vec![read.frag_id.clone()];
+		let mut redundant = vec![e];
+		while !todo_edges.is_empty() || !todo_frag_ids.is_empty() {
+			if let Some(edge) = todo_edges.pop() {
+				for k in e+1..evidence.len() {
+					if checked[e] { continue; }
+					if evidence[k].frag_start_pos == edge {
+						checked[e] = true;
+						redundant.push(k);
+						todo_frag_ids.push(evidence[k].frag_id.clone());
+					}
+				}
+			}
+
+			if let Some(frag_id) = todo_frag_ids.pop() {
+				for k in e+1..evidence.len() {
+					if checked[e] { continue; }
+					if evidence[k].frag_id == frag_id {
+						checked[e] = true;
+						redundant.push(k);
+						todo_edges.push(evidence[k].frag_start_pos);
+					}
+				}
+			}
+		}
+
+		// Now we have a list of redundant reads. Since we can only keep
+		// one of these reads as a source of evidence, we pick the "best"
+		// one. Currently this means the one with the longest flanks.
+		let mut best = 0;
+		let mut best_score = 0;
+		for k in redundant {
+			let seq = &evidence[k].sequence;
+			let left_len = seq.iter().position(|c| *c == '|' as u8).unwrap();
+			let right_len = seq.len() - left_len - 1;
+			let score = min(left_len, right_len);
+			if score > best_score {
+				best = k; best_score = score;
+			}
+		}
+		filtered.push(evidence[best]);
+	}
+	filtered
+}
 
 fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: usize, max_frag_len: usize) {
 
-	let fastq = bio::io::fasta::Reader::from_file(format!("{}.fa", genome_path)).unwrap();
+	let fasta = bio::io::fasta::Reader::from_file(format!("{}.fa", genome_path)).unwrap();
 	writeln!(stderr(), "Reading reference genome into memory...");
 	// FIXME: Use eprintln!() once it stabilizes...
 
 	let mut genome = HashMap::new();
-	for entry in fastq.records() {
+	for entry in fasta.records() {
 		let chr = entry.unwrap();
-		genome.insert(chr.id()/*.unwrap()*/.to_owned(), chr.seq().to_owned());
+		genome.insert(chr.id().to_owned(), chr.seq().to_owned());
 	}
 
     writeln!(stderr(), "Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
@@ -259,10 +319,16 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
         let mut mpos: usize = mcols.next().unwrap().parse().unwrap();
         let mut seq: Vec<u8> = anchor_info.split('#').last().unwrap().as_bytes().to_vec();
         let full_len: usize = seq.len();
+
+        // We store the fragment start position before we reorient the anchors.
+        let frag_start_pos = pos;
             
        	// Do not report rearrangements involving mitochondrial DNA
 	 	if chr.contains('M') || mchr.contains('M') { continue; }
 
+	 	// Reorient the read so that anchor #1 has the lower coordinate.
+	 	// This simplifies downstream analysis where we cluster the 
+	 	// rearrangement evidence by position.
         if chr > mchr || (chr == mchr && pos > mpos) {
         	swap(&mut chr, &mut mchr);
         	swap(&mut pos, &mut mpos);
@@ -341,7 +407,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			chr: chr.to_string(), pos: pos, strand: strand,
 			mchr: mchr.to_string(), mpos: mpos, mstrand: mstrand,
 			sequence: junction, frag_id: frag_id.to_string(),
-			signature: signature });
+			signature: signature, frag_start_pos: frag_start_pos });
     }
 
     writeln!(stderr(), "Found {} rearrangement supporting reads.", evidence.len());
@@ -357,26 +423,31 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     writeln!(stderr(), "Identifying rearrangements based on clusters of discordant reads...");
     let mut reported = vec![false; evidence.len()];
     for (e, read) in evidence.iter().enumerate() {
+    	// We skip reads that were already incorporated into some cluster.
     	if reported[e] { continue; }
-    	let mut cluster = vec![read];
+
+    	let mut cluster: Vec<&Evidence> = vec![read];
     	for s in e+1..evidence.len() {
+    		// We try to add more reads into the cluster until we encounter
+    		// the first read that is so far that it cannot possibly belong
+    		// to the cluster. Then we terminate since we know that all
+    		// further reads are also too far away (since they are sorted).
     		if evidence[s].chr != read.chr { break; }
     		if evidence[s].pos - read.pos > max_frag_len { break; }
+
+    		// Before we add a read into the cluster, we check that both
+    		// anchors are consistent with other reads in the cluster.
     		if evidence[s].mchr != read.mchr { continue; }
     		if (evidence[s].mpos as i64 - read.mpos as i64).abs() > max_frag_len as i64 { continue; }
     		if evidence[s].strand != read.strand { continue; }
     		if evidence[s].mstrand != read.mstrand { continue; }
 
-    		// Do not count multiple reads from the same DNA fragment
-    		// as independent sources of evidence.
-    		if cluster.iter().any(|r| r.frag_id == read.frag_id) { continue; }
-
-			// Discard reads with identical start positions.
-			if cluster.iter().any(|r| r.pos == read.pos) { continue; }
-
     		cluster.push(&evidence[s]);
     		reported[s] = true;
     	}
+
+    	cluster = remove_duplicate_evidence(cluster);
+
     	if cluster.len() < 2 { continue; }
 
     	print!("{}\t{}\t{}\t{}\t{}\t{}\t",
