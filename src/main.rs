@@ -172,6 +172,7 @@ fn detect_discordant_pairs(sam_path: String, out_prefix: String, max_frag_len: i
 fn remove_duplicate_evidence(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 	let mut checked = vec![false; evidence.len()];
 	let mut filtered: Vec<&Evidence> = Vec::new();
+
 	for (e, read) in evidence.iter().enumerate() {
 		// If the read was already found to be a redundant source of evidence,
 		// we don't need to check for redundancy again.
@@ -189,9 +190,9 @@ fn remove_duplicate_evidence(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 		while !todo_edges.is_empty() || !todo_frag_ids.is_empty() {
 			if let Some(edge) = todo_edges.pop() {
 				for k in e+1..evidence.len() {
-					if checked[e] { continue; }
+					if checked[k] { continue; }
 					if evidence[k].frag_start_pos == edge {
-						checked[e] = true;
+						checked[k] = true;
 						redundant.push(k);
 						todo_frag_ids.push(evidence[k].frag_id.clone());
 					}
@@ -200,9 +201,9 @@ fn remove_duplicate_evidence(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 
 			if let Some(frag_id) = todo_frag_ids.pop() {
 				for k in e+1..evidence.len() {
-					if checked[e] { continue; }
+					if checked[k] { continue; }
 					if evidence[k].frag_id == frag_id {
-						checked[e] = true;
+						checked[k] = true;
 						redundant.push(k);
 						todo_edges.push(evidence[k].frag_start_pos);
 					}
@@ -226,6 +227,12 @@ fn remove_duplicate_evidence(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 		}
 		filtered.push(evidence[best]);
 	}
+
+	/*if filtered.len() > 1 {
+		for read in &evidence {
+			println!("{}\t{}", read.frag_start_pos, read.frag_id);
+		}
+	}*/
 	filtered
 }
 
@@ -396,13 +403,15 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     	else { Ordering::Equal });
 
     writeln!(stderr(), "Identifying rearrangements based on clusters of discordant reads...");
+    println!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tCHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tSUPPORTING READS");
     let mut reported = vec![false; evidence.len()];
-    for (e, read) in evidence.iter().enumerate() {
+    for p in 0..evidence.len() {
     	// We skip reads that were already incorporated into some cluster.
-    	if reported[e] { continue; }
+    	if reported[p] { continue; }
 
+    	let read = &evidence[p];
     	let mut cluster: Vec<&Evidence> = vec![read];
-    	for s in e+1..evidence.len() {
+    	for s in p+1..evidence.len() {
     		// We try to add more reads into the cluster until we encounter
     		// the first read that is so far that it cannot possibly belong
     		// to the cluster. Then we terminate since we know that all
@@ -421,11 +430,11 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     		reported[s] = true;
     	}
 
+    	if cluster.len() < 2 { continue; }
     	cluster = remove_duplicate_evidence(cluster);
-
     	if cluster.len() < 2 { continue; }
 
-    	print!("{}\t{}\t{}\t{}\t{}\t{}\t",
+    	print!("{}\t{}\t{}\t\t{}\t{}\t{}\t\t",
     		read.chr, if read.strand { '+' } else { '-' }, read.pos,
     		read.mchr, if read.mstrand { '+' } else { '-' }, read.mpos);
     	for r in 0..cluster.len() {
