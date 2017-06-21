@@ -25,18 +25,6 @@ use bio::alphabets::dna;
 
 mod cli;
 
-// struct for having breakfast options
-struct BfOptions {
-    anchor_len :    usize,
-    max_frag_len:   usize,
-    min_mapq:       i32,
-    orientation:    &'static str,
-    all_reads:      bool,
-    discard_duplicates: &'static str,
-    min_reads:      &'static str,
-    freq_above:     i32,
-}
-
 struct Evidence {
 	chr: String,
 	pos: usize,
@@ -51,35 +39,20 @@ struct Evidence {
 }
 
 fn main() {
-  let defaults = BfOptions{ anchor_len : 0,
-                            max_frag_len: 5000,
-                            min_mapq: 15,
-                            orientation:  "fr",
-                            all_reads:  false,
-                            discard_duplicates: "both-ends",
-                            min_reads:    "0-0-0",
-                            freq_above: 0};
+	let mut anchor_len = 30;
+	let mut max_frag_len = 1000;
+	let mut orientation = "fr";
+	let mut discard_duplicates = "both-ends";
 
-  let mut anchor_len: usize   = defaults.anchor_len;
-  let mut max_frag_len: usize = defaults.max_frag_len;
-  let mut min_mapq: i32     = defaults.min_mapq;
-  let mut orientation       = String::from(defaults.orientation);
-  let mut all_reads: bool   = defaults.all_reads;
-  let mut discard_duplicates = String::from(defaults.discard_duplicates);
-  let mut min_reads     = String::from(defaults.min_reads);
-  let mut freq_above: i32 = defaults.freq_above;
-
-  let matches = cli::build_cli().get_matches();
-  if let ("detect", Some(detect)) = matches.subcommand() {
-      let bam_file = String::from(detect.value_of("bam_file").unwrap());
-      let genome = String::from(detect.value_of("genome").unwrap());
-
-      if detect.is_present("anchor-len") {
-          anchor_len = detect.value_of("anchor-len").unwrap().parse().unwrap();
-      }
-
-      detect_discordant_reads(bam_file, genome, anchor_len, max_frag_len);
-  }
+	let matches = cli::build_cli().get_matches();
+	if let ("detect", Some(detect)) = matches.subcommand() {
+		let bam_file = String::from(detect.value_of("bam_file").unwrap());
+		let genome = String::from(detect.value_of("genome").unwrap());
+		if detect.is_present("anchor-len") {
+	    	anchor_len = detect.value_of("anchor-len").unwrap().parse().unwrap();
+		}
+		detect_discordant_reads(bam_file, genome, anchor_len, max_frag_len);
+	}
 }
 
 
@@ -284,8 +257,11 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			if read.is_unmapped() == false { continue; }
 			if read.seq().len() < anchor_len * 2 { continue; }
 			let read_id = str::from_utf8(read.qname()).unwrap();
-			let seq = if read.is_reverse() { read.seq().as_bytes() } 
-			else { 	dna::revcomp(&read.seq().as_bytes()) };
+			let seq = if read.is_reverse() {
+				dna::revcomp(&read.seq().as_bytes())
+			} else {
+				read.seq().as_bytes()
+			};
 	 		let tail = seq.len() - anchor_len;
 			write!(bowtie_in, ">{}#1\n{}\n>{}#{}\n{}", &read_id, str::from_utf8(&seq[..anchor_len]).unwrap(), &read_id, str::from_utf8(&seq).unwrap(), str::from_utf8(&seq[tail..]).unwrap());
 	    }
@@ -352,7 +328,6 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 	 		dna::revcomp(&genome[mchr][mpos-1..mpos+full_len-1].to_vec())
 	 	};
 	 
-
 	 	// Check that the read sequence is not too homologous on either side
 		// of the breakpoint.
 		/*let mut left_match: f32 = 0.0;
@@ -372,21 +347,21 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 				
 		// Identify the breakpoint location that minimizes the number of
 		// nucleotide mismatches between the read and the breakpoint flanks.
-		let mut mismatches: Vec<usize> = vec![usize::max_value(); full_len];
+		let mut mismatches: Vec<usize> = vec![0; full_len];
 		for k in 0..anchor_len {
 			mismatches[anchor_len] += (seq[k] != left_grch[k]) as usize;
 		}
 		for k in anchor_len..full_len {
 			mismatches[anchor_len] += (seq[k] != right_grch[k]) as usize;
 		}
-		for k in anchor_len+1..full_len {
+		for k in anchor_len+1..full_len-anchor_len {
 			mismatches[k] = mismatches[k-1] +
-				(seq[k] != left_grch[k]) as usize +
+				(seq[k] != left_grch[k]) as usize -
 				(seq[k] != right_grch[k]) as usize;
 		}
-		let mut bp = 0;
-		let mut least_mismatches = mismatches[0];
-		for k in 1..full_len {
+		let mut bp = anchor_len;
+		let mut least_mismatches = mismatches[anchor_len];
+		for k in anchor_len+1..full_len-anchor_len {
 			if mismatches[k] < least_mismatches {
 				bp = k; least_mismatches = mismatches[k];
 			}
@@ -455,7 +430,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     		read.mchr, if read.mstrand { '+' } else { '-' }, read.mpos);
     	for r in 0..cluster.len() {
     		if r > 0 { print!(";"); }
-    		print!("{}", str::from_utf8(cluster[0].sequence.as_slice()).unwrap());
+    		print!("{}", str::from_utf8(cluster[r].sequence.as_slice()).unwrap());
     	}
     	println!();
 	}
