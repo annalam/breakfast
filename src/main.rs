@@ -357,8 +357,8 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		}
 		for k in anchor_len+1..full_len-anchor_len {
 			mismatches[k] = mismatches[k-1] +
-				(seq[k] != left_grch[k]) as usize -
-				(seq[k] != right_grch[k]) as usize;
+				(seq[k-1] != left_grch[k-1]) as usize -
+				(seq[k-1] != right_grch[k-1]) as usize;
 		}
 		let mut bp = anchor_len;
 		let mut least_mismatches = mismatches[anchor_len];
@@ -385,6 +385,15 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 		signature[4] = right_grch[bp];
 		signature[5] = right_grch[bp + 1];
 		signature[6] = right_grch[bp + 2];
+
+		// These were used for debugging junction printing.
+		//println!(" Sequence: {}", str::from_utf8(&seq).unwrap());
+		//println!(" Left ref: {}", str::from_utf8(&left_grch).unwrap());
+		//println!("Right ref: {}", str::from_utf8(&right_grch).unwrap());
+		//println!(" Junction: {}", str::from_utf8(&junction).unwrap());
+		//println!("Mismatches: {:?}", mismatches);
+		//println!("Least mismatches at: {}", bp);
+		//println!("-----");
 
 		evidence.push(Evidence {
 			chr: chr.to_string(), pos: pos, strand: strand,
