@@ -316,6 +316,8 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
         // If the read is at the very edge of a chromosome, ignore it.
 		if pos + full_len >= genome[chr].len() { continue; } 
 		if mpos + full_len >= genome[mchr].len() { continue; }
+		if pos < full_len { continue; }
+		if mpos < full_len { continue; }
 
 		let left_grch = if strand == true {
 			genome[chr][pos-1..pos+full_len-1].to_vec()
