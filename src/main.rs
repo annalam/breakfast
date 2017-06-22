@@ -4,15 +4,11 @@
 
 use std::mem::swap;
 use std::thread;
-use std::path::Path;
-use std::io::prelude::*;
-use std::fs;
 use std::str;
-use std::fs::File;
 use std::process::{Command, Stdio};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ascii::AsciiExt;
-use std::cmp::{min, max, Ordering};
+use std::cmp::{min, Ordering};
 use std::io::{BufReader, BufWriter, BufRead, Read, Write, stderr};
 use rust_htslib::bam;
 use rust_htslib::bam::Read as HTSRead;
@@ -27,10 +23,10 @@ mod cli;
 
 struct Evidence {
 	chr: String,
-	pos: usize,
+	pos: usize,            // Leftmost position of anchor #1 alignment
 	strand: bool,
 	mchr: String,
-	mpos: usize,
+	mpos: usize,           // Leftmost position of anchor #2 alignment
 	mstrand: bool,
 	sequence: Vec<u8>,     // Full sequence of breakpoint overlapping read
 	frag_id: String,       // Identifier of the DNA fragment in the BAM file
@@ -39,19 +35,17 @@ struct Evidence {
 }
 
 fn main() {
-	let mut anchor_len = 30;
-	let mut max_frag_len = 1000;
-	let mut orientation = "fr";
-	let mut discard_duplicates = "both-ends";
-
 	let matches = cli::build_cli().get_matches();
-	if let ("detect", Some(detect)) = matches.subcommand() {
-		let bam_file = String::from(detect.value_of("bam_file").unwrap());
-		let genome = String::from(detect.value_of("genome").unwrap());
-		if detect.is_present("anchor-len") {
-	    	anchor_len = detect.value_of("anchor-len").unwrap().parse().unwrap();
-		}
-		detect_discordant_reads(bam_file, genome, anchor_len, max_frag_len);
+	if let ("detect", Some(args)) = matches.subcommand() {
+		detect_discordant_reads(
+			args.value_of("bam_file").unwrap().to_string(),
+			args.value_of("genome").unwrap().to_string(),
+			args.value_of("anchor-len").unwrap().parse().unwrap(),
+			args.value_of("max-frag-len").unwrap().parse().unwrap());
+	} else if let ("filter", Some(args)) = matches.subcommand() {
+		filter(
+			args.value_of("sv_file").unwrap().to_string(),
+			args.value_of("min-reads").unwrap().parse().unwrap());
 	}
 }
 
@@ -383,7 +377,14 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 			junction[k+1] = if seq[k] == right_grch[k] { seq[k] } else { seq[k].to_ascii_lowercase() };
 		}
 
-		let signature = junction[bp-5..bp+5].to_vec();
+		let mut signature = vec![' ' as u8; 7];   // 3 bp from both flanks
+		signature[0] = left_grch[bp - 3];
+		signature[1] = left_grch[bp - 2];
+		signature[2] = left_grch[bp - 1];
+		signature[3] = '|' as u8;
+		signature[4] = right_grch[bp];
+		signature[5] = right_grch[bp + 1];
+		signature[6] = right_grch[bp + 2];
 
 		evidence.push(Evidence {
 			chr: chr.to_string(), pos: pos, strand: strand,
@@ -425,6 +426,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     		if (evidence[s].mpos as i64 - read.mpos as i64).abs() > max_frag_len as i64 { continue; }
     		if evidence[s].strand != read.strand { continue; }
     		if evidence[s].mstrand != read.mstrand { continue; }
+    		if evidence[s].signature != read.signature { continue; }
 
     		cluster.push(&evidence[s]);
     		reported[s] = true;
@@ -432,7 +434,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 
     	if cluster.len() < 2 { continue; }
     	cluster = remove_duplicate_evidence(cluster);
-    	if cluster.len() < 2 { continue; }
+    	if cluster.len() < 3 { continue; }
 
     	print!("{}\t{}\t{}\t\t{}\t{}\t{}\t\t",
     		read.chr, if read.strand { '+' } else { '-' }, read.pos,
@@ -444,3 +446,9 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     	println!();
 	}
 }
+
+
+fn filter(sv_path: String, min_reads: usize) {
+
+}
+
