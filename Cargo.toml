@@ -6,4 +6,5 @@ authors = ["Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
 [dependencies]
 clap = "*"
 bio = "*"
+regex = "*"
 rust-htslib = "*"

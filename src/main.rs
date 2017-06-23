@@ -15,12 +15,14 @@ use rust_htslib::bam::Read as HTSRead;
 
 extern crate clap;
 extern crate bio;
+extern crate regex;
 extern crate rust_htslib;
 
 use bio::alphabets::dna;
 
 mod cli;
 mod filter;
+mod annotate;
 
 struct Evidence {
 	chr: String,
@@ -48,6 +50,10 @@ fn main() {
 			args.value_of("sv_file").unwrap().to_string(),
 			args.value_of("min-reads").unwrap().parse().unwrap(),
 			args.value_of("blacklist_file").unwrap().parse().unwrap());
+	} else if let ("annotate", Some(args)) = matches.subcommand() {
+	    annotate::annotate(
+	        args.value_of("sv_file").unwrap().to_string(),
+	        args.value_of("bed_file").unwrap().to_string());
 	}
 }
 
