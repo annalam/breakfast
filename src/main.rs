@@ -20,6 +20,7 @@ extern crate rust_htslib;
 use bio::alphabets::dna;
 
 mod cli;
+mod filter;
 
 struct Evidence {
 	chr: String,
@@ -43,9 +44,10 @@ fn main() {
 			args.value_of("anchor-len").unwrap().parse().unwrap(),
 			args.value_of("max-frag-len").unwrap().parse().unwrap());
 	} else if let ("filter", Some(args)) = matches.subcommand() {
-		filter(
+		filter::filter(
 			args.value_of("sv_file").unwrap().to_string(),
-			args.value_of("min-reads").unwrap().parse().unwrap());
+			args.value_of("min-reads").unwrap().parse().unwrap(),
+			args.value_of("blacklist_file").unwrap().parse().unwrap());
 	}
 }
 
@@ -299,12 +301,12 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 
         // We store the fragment start position before we reorient the anchors.
         let frag_start_pos = pos;
-            
+
        	// Do not report rearrangements involving mitochondrial DNA
 	 	if chr.contains('M') || mchr.contains('M') { continue; }
 
 	 	// Reorient the read so that anchor #1 has the lower coordinate.
-	 	// This simplifies downstream analysis where we cluster the 
+	 	// This simplifies downstream analysis where we cluster the
 	 	// rearrangement evidence by position.
         if chr > mchr || (chr == mchr && pos > mpos) {
         	swap(&mut chr, &mut mchr);
@@ -312,12 +314,12 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
         	let tmp = strand; strand = !mstrand; mstrand = !tmp;
         	seq = dna::revcomp(&seq);
         }
-        
+
         // If the read is at the very edge of a chromosome, ignore it.
-		if pos + full_len >= genome[chr].len() { continue; } 
+		if pos + full_len >= genome[chr].len() { continue; }
 		if mpos + full_len >= genome[mchr].len() { continue; }
-		if pos < full_len { continue; }
-		if mpos < full_len { continue; }
+		//if pos < full_len { continue; }
+		//if mpos < full_len { continue; }
 
 		let left_grch = if strand == true {
 			genome[chr][pos-1..pos+full_len-1].to_vec()
@@ -330,24 +332,24 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
 	 	} else {
 	 		dna::revcomp(&genome[mchr][mpos-1..mpos+full_len-1].to_vec())
 	 	};
-	 
+
 	 	// Check that the read sequence is not too homologous on either side
 		// of the breakpoint.
 		/*let mut left_match: f32 = 0.0;
-	  	for k in full_len-anchor_len+1..full_len { 
+	  	for k in full_len-anchor_len+1..full_len {
  			if seq[k] == left_grch[k]{ left_match += 1.0; }
    		}
   		left_match = left_match /anchor_len as f32;
-  		
+
   		let mut right_match: f32 = 0.0;
-	  	for k in 1..anchor_len { 
+	  	for k in 1..anchor_len {
  			if seq[k] == right_grch[k]{ right_match += 1.0; }
    		}
   		right_match = right_match/anchor_len as f32;
 		let max_homology = 0.7;
-		
+
 		if left_match >= max_homology || right_match >= max_homology { continue; }*/
-				
+
 		// Identify the breakpoint location that minimizes the number of
 		// nucleotide mismatches between the read and the breakpoint flanks.
 		let mut mismatches: Vec<usize> = vec![0; full_len];
@@ -457,9 +459,3 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
     	println!();
 	}
 }
-
-
-fn filter(sv_path: String, min_reads: usize) {
-
-}
-

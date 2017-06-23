@@ -28,8 +28,11 @@ pub fn build_cli() -> App<'static, 'static> {
         .subcommand(SubCommand::with_name("filter")
             .arg(Arg::with_name("sv_file")
                 .required(true).takes_value(true))
+            .arg(Arg::with_name("blacklist_file")
+                .takes_value(true))
             .arg(Arg::with_name("min-reads")
                 .short("r").long("min-reads")
+                .required(true)
                 .takes_value(true).value_name("N")
                 .help("Minimum number of breakpoint-spanning reads required to accept a rearrangement")))
 
