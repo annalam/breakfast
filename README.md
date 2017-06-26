@@ -3,6 +3,7 @@ based on RNA-seq data.
 
 TODO
 ====
+- Write "Getting started" documentation for the tool.
 - Allow '-' to be used as BAM file name, to read from STDIN.
 - Allow user to customize how many mismatches are allowed in a breakpoint-overlapping read (currently there is no limit).
 - When aligning breakpoint-overlapping reads to putative rearrangement breakpoints, take indels into account in addition to mismatches.
