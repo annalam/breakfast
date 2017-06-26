@@ -1,6 +1,12 @@
 BreakFast is a toolkit for detecting chromosomal rearrangements
 based on RNA-seq data.
 
+Getting started
+===============
+
+Detailed description of algorithm
+=================================
+
 TODO
 ====
 - Write "Getting started" documentation for the tool.
