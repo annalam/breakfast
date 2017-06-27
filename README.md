@@ -14,6 +14,25 @@ Unix Binary
 ============
 - []
 
+
+Compile from source
+===================
+- install [Rust](https://www.rust-lang.org/en-US/)
+```
+	git clone https://github.com/mgvel/breakfast.rs.git
+	
+	cd breakfast.rs
+	cargo build --release
+```
+	Run with 
+	
+	``` ./target/release/breakfast ```
+	Or copy to your binaries location
+	
+	``` cp ./target/release/breakfast [DESTINATION-PATH] ```
+	
+	
+
 Detailed description of algorithm
 =================================
 
