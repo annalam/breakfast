@@ -24,12 +24,12 @@ Compile from source
 	cd breakfast.rs
 	cargo build --release
 ```
-	Run with 
+Run with 
 	
 ```
 ./target/release/breakfast 
 ```
-	Or copy to your binaries location
+Or copy to your binaries location
 	
 ```
 cp ./target/release/breakfast [DESTINATION-PATH]
