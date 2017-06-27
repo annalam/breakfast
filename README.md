@@ -26,10 +26,14 @@ Compile from source
 ```
 	Run with 
 	
-	``` ./target/release/breakfast ```
+```
+./target/release/breakfast 
+```
 	Or copy to your binaries location
 	
-	``` cp ./target/release/breakfast [DESTINATION-PATH] ```
+```
+cp ./target/release/breakfast [DESTINATION-PATH]
+```
 	
 	
 
