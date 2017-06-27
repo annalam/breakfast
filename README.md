@@ -22,6 +22,7 @@ Compile from source
 	git clone https://github.com/mgvel/breakfast.rs.git
 	
 	cd breakfast.rs
+	
 	cargo build --release
 ```
 Run with 
