@@ -4,6 +4,16 @@ based on RNA-seq data.
 Getting started
 ===============
 
+Requirements
+============
+- [samtools](http://samtools.sourceforge.net/) 
+- [bowtie](http://bowtie-bio.sourceforge.net/index.shtml)
+
+
+Unix Binary
+============
+- []
+
 Detailed description of algorithm
 =================================
 
