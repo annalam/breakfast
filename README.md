@@ -12,7 +12,7 @@ Requirements
 
 Unix Binary
 ============
-- []
+- Download release
 
 
 Compile from source
@@ -27,16 +27,15 @@ Compile from source
 Run with 
 	
 ```
-./target/release/breakfast 
+	./target/release/breakfast 
 ```
 Or copy to your binaries location
 	
 ```
-cp ./target/release/breakfast [DESTINATION-PATH]
+	cp ./target/release/breakfast [DESTINATION-PATH]
 ```
 	
 	
-
 Detailed description of algorithm
 =================================
 
