@@ -56,7 +56,7 @@ pub fn annotate(sv_path: String, bed_path: String) {
             }
         }
 
-		
+
         for f in &features {
             let fe: Vec<&str> = f.split('\t').collect();
             if fe[0] == chr_2 {
@@ -66,30 +66,35 @@ pub fn annotate(sv_path: String, bed_path: String) {
 
         nearby_features_1.retain(|ref x, &mut v| v < 100_000);
         nearby_features_2.retain(|ref x, &mut v| v < 100_000);
-        
+
         let mut sorted_1: Vec<String> = nearby_features_1.keys().cloned().collect();
         		sorted_1.sort();
 		let mut sorted_2: Vec<String> = nearby_features_2.keys().cloned().collect();
         		sorted_2.sort();
-		
+
 		let mut nb_feat1 = HashMap::new();
 		let mut nb_feat2 = HashMap::new();
-		
+
 		for key in &sorted_1 {
 			if nearby_features_1.contains_key(key) {
 				nb_feat1.insert(key, nearby_features_1.get(key).unwrap());
 			} else { continue; }
 		}
-		
+
 		for key in sorted_2.iter() {
 			if nearby_features_2.contains_key(key) {
 				nb_feat2.insert(key, nearby_features_2.get(key).unwrap());
 			} else { continue; }
 		}
-		
-		
-		let mut nb1 = String::new();
-		let mut nb2 = String::new();
-		
+
+		let mut nb1: Vec<String> = vec![];
+		let mut nb2: Vec<String> = vec![];
+
+		for (g, n) in nb_feat1 { nb1.push(format!("{} ({:?})", g, n)); }
+		for (g, n) in nb_feat2 { nb2.push(format!("{} ({:?})", g, n)); }
+        //TODO push nb1 and nb2 to tokens[3] and tokens[8]
+        //tokens[3] = &nb1[..].to_owned().join(",");
+        //FIXME above pushing not compiling "borrow error"
+        println!("{}\t{}\t{}\t{}\t{}", tokens[..3].join("\t"), nb1.join(", "), tokens[4..8].join("\t"), nb2.join(", "), tokens[9..].join("\t"));
 	}
 }
