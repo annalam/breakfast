@@ -4,39 +4,39 @@ based on RNA-seq data.
 Getting started
 ===============
 
-Requirements
+##Requirements
 ============
-- [samtools](http://samtools.sourceforge.net/) 
+- [samtools](http://samtools.sourceforge.net/)
 - [bowtie](http://bowtie-bio.sourceforge.net/index.shtml)
 
 
-Unix Binary
+##Unix Binary
 ============
 - Download release
 
 
-Compile from source
+##Compile from source
 ===================
 - install [Rust](https://www.rust-lang.org/en-US/)
 ```
 	git clone https://github.com/mgvel/breakfast.rs.git
-	
+
 	cd breakfast.rs
-	
+
 	cargo build --release
 ```
-Run with 
-	
+Run with
+
 ```
-	./target/release/breakfast 
+	./target/release/breakfast
 ```
 Or copy to your binaries location
-	
+
 ```
 	cp ./target/release/breakfast [DESTINATION-PATH]
 ```
-	
-	
+
+
 Detailed description of algorithm
 =================================
 
