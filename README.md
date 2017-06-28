@@ -4,18 +4,18 @@ based on RNA-seq data.
 Getting started
 ===============
 
-##Requirements
+Requirements
 ============
 - [samtools](http://samtools.sourceforge.net/)
 - [bowtie](http://bowtie-bio.sourceforge.net/index.shtml)
 
 
-##Unix Binary
+Unix Binary
 ============
 - Download release
 
 
-##Compile from source
+Compile from source
 ===================
 - install [Rust](https://www.rust-lang.org/en-US/)
 ```
