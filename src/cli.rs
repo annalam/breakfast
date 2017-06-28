@@ -47,9 +47,11 @@ pub fn build_cli() -> App<'static, 'static> {
         .subcommand(SubCommand::with_name("blacklist")
             .arg(Arg::with_name("sv_files")
                 .required(true)
-                .takes_value(true))
+                .takes_value(true)
+                .multiple(true))
             .arg(Arg::with_name("freq-above")
                 .long("freq-above")
                 .takes_value(true).value_name("FREQ")
                 .help("Minimum frequency at which a variant must be present among the control samples to be considered a false positive [default: 0].")))
+
 }

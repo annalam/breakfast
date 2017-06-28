@@ -33,6 +33,7 @@ pub fn annotate(sv_path: String, bed_path: String) {
 
     let re = Regex::new(r" \(ENSG.*?\)").unwrap();
     println!("{}", sv_file_header);
+
     for l in sv.lines() {
 		let line: String = l.unwrap();
 		if !line.starts_with("chr") { continue; }
@@ -55,7 +56,6 @@ pub fn annotate(sv_path: String, bed_path: String) {
                 nearby_features_1.insert(re.replace(fe[4], "").to_string(), distance_to_gene(pos_1, fe[2].parse::<usize>().unwrap()));
             }
         }
-
 
         for f in &features {
             let fe: Vec<&str> = f.split('\t').collect();

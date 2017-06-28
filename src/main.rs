@@ -23,6 +23,8 @@ use bio::alphabets::dna;
 mod cli;
 mod filter;
 mod annotate;
+mod blacklist;
+
 
 struct Evidence {
 	chr: String,
@@ -54,6 +56,10 @@ fn main() {
 	    annotate::annotate(
 	        args.value_of("sv_file").unwrap().to_string(),
 	        args.value_of("bed_file").unwrap().to_string());
+	} else if let ("blacklist", Some(args)) = matches.subcommand() {
+	    blacklist::generate_blacklist(
+	        args.values_of("sv_files").unwrap().collect::<Vec<_>>(),
+	        args.value_of("freq-above").unwrap().parse().unwrap());
 	}
 }
 
