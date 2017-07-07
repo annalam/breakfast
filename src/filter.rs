@@ -28,7 +28,7 @@ pub fn filter(sv_path: String, min_reads: usize, blacklist_path: String) {
 		.expect("Could not open .sv file."));
 	let mut header = String::new();
 	sv_file.read_line(&mut header);
-	println!("{}", header);
+	print!("{}", header);
 
 	for l in sv_file.lines() {
 		let line: String = l.unwrap();

@@ -57,7 +57,7 @@ pub fn build_cli() -> App<'static, 'static> {
                 .multiple(true))
             .arg(Arg::with_name("freq-above")
                 .long("freq-above")
-                .takes_value(true).value_name("FREQ")
-                .help("Minimum frequency at which a variant must be present among the control samples to be considered a false positive [default: 0].")))
+                .takes_value(true).value_name("FREQ").default_value("0")
+                .help("Minimum frequency at which a variant must be present among the control samples to be considered a false positive")))
 
 }
