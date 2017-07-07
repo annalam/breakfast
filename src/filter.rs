@@ -19,7 +19,7 @@ pub fn sv_locus_identifiers(chr: &str, pos: usize, resolution: i32) -> Vec<Strin
 pub fn filter(sv_path: String, min_reads: usize, blacklist_path: String) {
 	let mut blacklist = HashSet::new();
 	if !blacklist_path.is_empty() {
-		let mut bl = BufReader::new(File::open(&blacklist_path)
+		let bl = BufReader::new(File::open(&blacklist_path)
 			.expect("Could not open blacklist file."));
 		for line in bl.lines() { blacklist.insert(line.unwrap()); }
 	}
@@ -38,13 +38,13 @@ pub fn filter(sv_path: String, min_reads: usize, blacklist_path: String) {
 		let num_reads = tokens[8].split(';').count();
 		if num_reads < min_reads { continue; }
 
-        let mut chrom = tokens[0];
-        let mut pos: usize = tokens[2].parse().unwrap();
-        let mut loci_1: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
+        let chrom = tokens[0];
+        let pos: usize = tokens[2].parse().unwrap();
+        let loci_1: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
 
-        chrom = tokens[4];
-        pos = tokens[6].parse().unwrap();
-        let mut loci_2: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
+        let chrom = tokens[4];
+        let pos = tokens[6].parse().unwrap();
+        let loci_2: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
 
         if loci_1.is_disjoint(&blacklist) || loci_2.is_disjoint(&blacklist) {
             println!("{}", line);

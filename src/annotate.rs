@@ -17,8 +17,8 @@ pub fn distance_to_gene(sv_pos: usize, gene_pos: usize) ->usize {
 
 pub fn annotate(sv_path: String, bed_path: String) {
     let sv_file_header: String = "CHROM\tSTRAND\tPOSITION\tNEARBY_FEATURES\t\tCHROM\tSTRAND\tPOSITION\tNEARBY_FEATURES\t\tNUM_SPANNING_FRAGMENTS\tNUM_SPANNING_MATES\tSPANNING_MATE_SEQUENCES".to_uppercase();
-    let mut sv  = BufReader::new(File::open(&sv_path).unwrap());
-    let mut bed = BufReader::new(File::open(&bed_path).unwrap());
+    let sv = BufReader::new(File::open(&sv_path).unwrap());
+    let bed = BufReader::new(File::open(&bed_path).unwrap());
 
     let mut features: Vec<String> = Vec::new();
 
@@ -38,14 +38,14 @@ pub fn annotate(sv_path: String, bed_path: String) {
 		let line: String = l.unwrap();
 		if !line.starts_with("chr") { continue; }
 
-		let mut tokens: Vec<&str> = line.split('\t').collect();
+		let tokens: Vec<&str> = line.split('\t').collect();
         let chr_1    = tokens[0];
         let strand_1 = tokens[1];
-        let pos_1    = tokens[2].parse::<usize>().unwrap();
+        let pos_1: usize = tokens[2].parse().unwrap();
 
         let chr_2    = tokens[5];
         let strand_2 = tokens[6];
-        let pos_2    = tokens[7].parse::<usize>().unwrap();
+        let pos_2: usize = tokens[7].parse().unwrap();
 
         let mut nearby_features_1 = HashMap::new();
         let mut nearby_features_2 = HashMap::new();
