@@ -51,7 +51,7 @@ fn main() {
 		filter::filter(
 			args.value_of("sv_file").unwrap().to_string(),
 			args.value_of("min-reads").unwrap().parse().unwrap(),
-			args.value_of("blacklist_file").unwrap().parse().unwrap());
+			args.value_of("blacklist").unwrap().parse().unwrap());
 	} else if let ("annotate", Some(args)) = matches.subcommand() {
 	    annotate::annotate(
 	        args.value_of("sv_file").unwrap().to_string(),
