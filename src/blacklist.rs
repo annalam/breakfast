@@ -16,21 +16,20 @@ pub fn generate_blacklist(sv_files: Vec<&str>, min_freq: usize) {
     println!("Before {}", sample_variants.len());
 
     for (s, sv_file) in sv_files.iter().enumerate() {
-        let mut sv  = BufReader::new(File::open(&sv_file).unwrap());
-        println!("{}:\t{}", s, sv_file);
+        let sv = BufReader::new(File::open(&sv_file).unwrap());
 
         for l in sv.lines() {
             let line = l.unwrap();
             if !line.starts_with("chr") { continue; }
 
-            let mut tokens: Vec<&str> = line.split('\t').collect();
-            let mut chrom = tokens[0];
-            let mut pos   = tokens[2].parse::<usize>().unwrap();
-            let mut tmp1: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
+            let tokens: Vec<&str> = line.split('\t').collect();
+            let chrom = tokens[0];
+            let pos: usize = tokens[2].parse().unwrap();
+            let tmp1: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
 
-            let mut chrom = tokens[5];
-            let mut pos   = tokens[7].parse::<usize>().unwrap();
-            let mut tmp2: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
+            let chrom = tokens[5];
+            let pos: usize = tokens[7].parse().unwrap();
+            let tmp2: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
 
             let tmp: HashSet<String> = tmp1.union(&tmp2).cloned().collect();
             //println!("inner test {:?}", &tmp);
