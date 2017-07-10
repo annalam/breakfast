@@ -1,6 +1,6 @@
 //src/annotate.rs
 
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, stdin};
 use std::fs::File;
 use regex::Regex;
 use std::collections::HashMap;
@@ -17,8 +17,15 @@ pub fn distance_to_gene(sv_pos: usize, gene_pos: usize) ->usize {
 
 pub fn annotate(sv_path: String, bed_path: String) {
     let sv_file_header: String = "CHROM\tSTRAND\tPOSITION\tNEARBY_FEATURES\t\tCHROM\tSTRAND\tPOSITION\tNEARBY_FEATURES\t\tNUM_SPANNING_FRAGMENTS\tNUM_SPANNING_MATES\tSPANNING_MATE_SEQUENCES".to_uppercase();
-    let mut sv  = BufReader::new(File::open(&sv_path).unwrap());
-    let mut bed = BufReader::new(File::open(&bed_path).unwrap());
+
+    let mut sv: Box<BufRead>;
+    if sv_path == "-" {   // TODO: Make a function that handles this.
+    	sv = Box::new(BufReader::new(stdin()));
+    } else {
+    	sv = Box::new(BufReader::new(File::open(&sv_path).unwrap()));
+    }
+
+    let bed = BufReader::new(File::open(&bed_path).unwrap());
 
     let mut features: Vec<String> = Vec::new();
 
@@ -38,14 +45,14 @@ pub fn annotate(sv_path: String, bed_path: String) {
 		let line: String = l.unwrap();
 		if !line.starts_with("chr") { continue; }
 
-		let mut tokens: Vec<&str> = line.split('\t').collect();
+		let tokens: Vec<&str> = line.split('\t').collect();
         let chr_1    = tokens[0];
         let strand_1 = tokens[1];
-        let pos_1    = tokens[2].parse::<usize>().unwrap();
+        let pos_1: usize = tokens[2].parse().unwrap();
 
-        let chr_2    = tokens[5];
-        let strand_2 = tokens[6];
-        let pos_2    = tokens[7].parse::<usize>().unwrap();
+        let chr_2    = tokens[4];
+        let strand_2 = tokens[5];
+        let pos_2: usize = tokens[6].parse().unwrap();
 
         let mut nearby_features_1 = HashMap::new();
         let mut nearby_features_2 = HashMap::new();
@@ -60,7 +67,7 @@ pub fn annotate(sv_path: String, bed_path: String) {
         for f in &features {
             let fe: Vec<&str> = f.split('\t').collect();
             if fe[0] == chr_2 {
-                nearby_features_2.insert(re.replace(fe[4], "").to_string(), distance_to_gene(pos_1, fe[2].parse::<usize>().unwrap()));
+                nearby_features_2.insert(re.replace(fe[4], "").to_string(), distance_to_gene(pos_2, fe[2].parse::<usize>().unwrap()));
             }
         }
 
@@ -95,6 +102,6 @@ pub fn annotate(sv_path: String, bed_path: String) {
         //TODO push nb1 and nb2 to tokens[3] and tokens[8]
         //tokens[3] = &nb1[..].to_owned().join(",");
         //FIXME above pushing not compiling "borrow error"
-        println!("{}\t{}\t{}\t{}\t{}", tokens[..3].join("\t"), nb1.join(", "), tokens[4..8].join("\t"), nb2.join(", "), tokens[9..].join("\t"));
+        println!("{}\t{}\t{}\t{}\t{}", tokens[..3].join("\t"), nb1.join(", "), tokens[4..8].join("\t"), nb2.join(", "), tokens[8]);
 	}
 }

@@ -17,31 +17,34 @@ pub fn sv_locus_identifiers(chr: &str, pos: usize, resolution: i32) -> Vec<Strin
 }
 
 pub fn filter(sv_path: String, min_reads: usize, blacklist_path: String) {
-	println!("{}\t{}", sv_path, 15);
+	let mut blacklist = HashSet::new();
+	if !blacklist_path.is_empty() {
+		let bl = BufReader::new(File::open(&blacklist_path)
+			.expect("Could not open blacklist file."));
+		for line in bl.lines() { blacklist.insert(line.unwrap()); }
+	}
 
-	let mut sv = BufReader::new(File::open(&sv_path).unwrap());
-	let mut bl =  BufReader::new(File::open(&blacklist_path).unwrap());
-    let mut blacklist = HashSet::new();
+	let mut sv_file = BufReader::new(File::open(&sv_path)
+		.expect("Could not open .sv file."));
+	let mut header = String::new();
+	sv_file.read_line(&mut header);
+	print!("{}", header);
 
-	for b in bl.lines() {
-       let line  = b.unwrap();
-       blacklist.insert(line);
-    }
-
-	for l in sv.lines() {
+	for l in sv_file.lines() {
 		let line: String = l.unwrap();
-		if !line.starts_with("chr") { continue; }
+		let tokens: Vec<&str> = line.split('\t').collect();
+		if tokens.len() < 9 { continue; }
 
-		let mut tokens: Vec<&str> = line.split('\t').collect();
-		if tokens[10].parse::<i32>().unwrap() < min_reads as i32 { continue; }
+		let num_reads = tokens[8].split(';').count();
+		if num_reads < min_reads { continue; }
 
-        let mut chrom = tokens[0];
-        let mut pos = tokens[2].parse::<usize>().unwrap();
-        let mut loci_1: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
+        let chrom = tokens[0];
+        let pos: usize = tokens[2].parse().unwrap();
+        let loci_1: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
 
-                chrom = tokens[5];
-                pos = tokens[7].parse::<usize>().unwrap();
-        let mut loci_2: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
+        let chrom = tokens[4];
+        let pos = tokens[6].parse().unwrap();
+        let loci_2: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
 
         if loci_1.is_disjoint(&blacklist) || loci_2.is_disjoint(&blacklist) {
             println!("{}", line);

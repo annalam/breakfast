@@ -2,12 +2,17 @@
 // Argument parser and CLI (Command Line Interface)
 // for BreakFast
 
-use clap::{App, Arg, SubCommand};
+use clap::{App, Arg, SubCommand, AppSettings};
 
 pub fn build_cli() -> App<'static, 'static> {
-    App::new("breakfast")
+    App::new("Breakfast")
         .version("0.1")
-        .about("Breakfast is a toolkit for detecting chromosomal rearrangements based on whole genome sequencing data.")
+        .about("\nBreakfast is a toolkit for detecting chromosomal rearrangements based on whole genome sequencing data.")
+        .setting(AppSettings::ArgRequiredElseHelp)
+        .setting(AppSettings::DisableHelpSubcommand)
+        .setting(AppSettings::UnifiedHelpMessage)
+        .setting(AppSettings::VersionlessSubcommands)
+        .setting(AppSettings::SubcommandRequiredElseHelp)
 
         .subcommand(SubCommand::with_name("detect")
             .arg(Arg::with_name("bam_file")
@@ -28,7 +33,8 @@ pub fn build_cli() -> App<'static, 'static> {
         .subcommand(SubCommand::with_name("filter")
             .arg(Arg::with_name("sv_file")
                 .required(true).takes_value(true))
-            .arg(Arg::with_name("blacklist_file")
+            .arg(Arg::with_name("blacklist")
+            	.long("blacklist").value_name("path").default_value("")
                 .takes_value(true))
             .arg(Arg::with_name("min-reads")
                 .short("r").long("min-reads")
@@ -51,7 +57,7 @@ pub fn build_cli() -> App<'static, 'static> {
                 .multiple(true))
             .arg(Arg::with_name("freq-above")
                 .long("freq-above")
-                .takes_value(true).value_name("FREQ")
-                .help("Minimum frequency at which a variant must be present among the control samples to be considered a false positive [default: 0].")))
+                .takes_value(true).value_name("FREQ").default_value("0")
+                .help("Minimum frequency at which a variant must be present among the control samples to be considered a false positive")))
 
 }

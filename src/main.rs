@@ -51,7 +51,7 @@ fn main() {
 		filter::filter(
 			args.value_of("sv_file").unwrap().to_string(),
 			args.value_of("min-reads").unwrap().parse().unwrap(),
-			args.value_of("blacklist_file").unwrap().parse().unwrap());
+			args.value_of("blacklist").unwrap().parse().unwrap());
 	} else if let ("annotate", Some(args)) = matches.subcommand() {
 	    annotate::annotate(
 	        args.value_of("sv_file").unwrap().to_string(),
@@ -263,7 +263,7 @@ fn detect_discordant_reads(sam_path: String, genome_path: String, anchor_len: us
         .spawn().unwrap();
 
 	let mut bowtie_in = BufWriter::new(bowtie.stdin.unwrap());
-	let mut bowtie_out = BufReader::new(bowtie.stdout.unwrap());
+	let bowtie_out = BufReader::new(bowtie.stdout.unwrap());
 
 	thread::spawn(move || {
 		let bam = bam::Reader::from_path(&sam_path).unwrap();

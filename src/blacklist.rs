@@ -9,14 +9,15 @@ pub fn natural_sorted() {
 }
 
 pub fn generate_blacklist(sv_files: Vec<&str>, min_freq: usize) {
-    println!("{}", sv_files.len());
+    println!("Total samples  {}", sv_files.len());
 
-    let mut sample_variants: Vec<HashSet<String>> = Vec::new();
+    let mut sample_variants: Vec<HashSet<String>> = Vec::with_capacity(sv_files.len());
 
-    println!("{}", sample_variants.len());
+    println!("Before {}", sample_variants.len());
 
     for (s, sv_file) in sv_files.iter().enumerate() {
         let mut sv  = BufReader::new(File::open(&sv_file).unwrap());
+        println!("{}:\t{}", s, sv_file);
 
         for l in sv.lines() {
             let line = l.unwrap();
@@ -31,14 +32,17 @@ pub fn generate_blacklist(sv_files: Vec<&str>, min_freq: usize) {
             let mut pos   = tokens[7].parse::<usize>().unwrap();
             let mut tmp2: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
 
-            //sample_variants[s] = tmp1;
-            //let tmp = tmp1.union(&tmp2);
-
-            println!("{:?}", tmp1.union(&tmp2));
-
+            let tmp: HashSet<String> = tmp1.union(&tmp2).cloned().collect();
+            //println!("inner test {:?}", &tmp);
+            sample_variants.push(tmp);
 
         }
-        println!("{}:\t{}", s, sv_file);
+
+        for loci in &sample_variants {
+            println!("total variants in loci {:?}", loci);
+        }
+
+
     }
 
 }
