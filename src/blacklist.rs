@@ -4,8 +4,11 @@ use std::collections::HashSet;
 
 use filter::sv_locus_identifiers as sv_locus_identifiers;
 
-pub fn natural_sorted() {
-    unimplemented!();
+pub fn natural_sorted(blacklist: HashSet<String>) -> HashSet<String> {
+    let mut v: Vec<String> = blacklist.into_iter().collect();
+    v.sort_by(|a, b| a.cmp(b)); 
+    let out: HashSet<_> = v.into_iter().collect();
+    out
 }
 
 pub fn generate_blacklist(sv_files: Vec<&str>, min_freq: usize) {
@@ -32,16 +35,26 @@ pub fn generate_blacklist(sv_files: Vec<&str>, min_freq: usize) {
             let tmp2: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
 
             let tmp: HashSet<String> = tmp1.union(&tmp2).cloned().collect();
-            //println!("inner test {:?}", &tmp);
             sample_variants.push(tmp);
-
         }
-
-        for loci in &sample_variants {
-            println!("total variants in loci {:?}", loci);
-        }
-
-
     }
+
+     let mut blacklist: HashSet<String> = HashSet::new();
+     for loci in sample_variants {
+        for l in loci {
+         blacklist.insert(l);
+        }
+     }
+   
+     blacklist = natural_sorted(blacklist);
+    
+    let mut frequency: Vec<usize> = vec![0; blacklist.len()];
+    for (k, bad_variant) in enumerate(blacklist) {
+        let bad_in_sample: Vec<usize> = Vec::new();
+        }
+    }
+
+    println!("{:?}", frequency);
+    println!("{:?}", &blacklist.len());
 
 }
