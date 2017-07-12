@@ -1,22 +1,24 @@
+
+use parse_args;
 use std::io::{BufRead, BufReader};
 use std::collections::HashSet;
 use std::fs::File;
 
-pub fn sv_locus_identifiers(chr: &str, pos: usize, resolution: i32) -> Vec<String> {
-    let bin: i32 = pos as i32 / resolution;
-	let mut bins: Vec<i32> = Vec::new();
-    for i in bin-1..bin+2 as i32 {
-    	bins.push(i * resolution);
-    }
+const USAGE: &'static str = "
+Usage:
+  breakfast filter [options] <sv_path>
 
-	let mut out: Vec<String> = Vec::new();
-    for pos in bins {
-    	out.push(format!("{}:{}", &chr, &pos.to_string()));
-    }
-	out
-}
+Options:
+  --min-reads=N     Minimum number of supporting reads [default: 0]
+  --blacklist=PATH  Path to blacklist file [default: '']
+";
 
-pub fn filter(sv_path: String, min_reads: usize, blacklist_path: String) {
+pub fn main() {
+	let args = parse_args(USAGE);
+	let sv_path = args.get_str("<sv_path>");
+	let min_reads: usize = args.get_str("--min-reads").parse().unwrap();
+	let blacklist_path = args.get_str("--blacklist");
+
 	let mut blacklist = HashSet::new();
 	if !blacklist_path.is_empty() {
 		let bl = BufReader::new(File::open(&blacklist_path)
@@ -51,3 +53,19 @@ pub fn filter(sv_path: String, min_reads: usize, blacklist_path: String) {
         }
 	}
 }
+
+
+fn sv_locus_identifiers(chr: &str, pos: usize, resolution: i32) -> Vec<String> {
+    let bin: i32 = pos as i32 / resolution;
+	let mut bins: Vec<i32> = Vec::new();
+    for i in bin-1..bin+2 as i32 {
+    	bins.push(i * resolution);
+    }
+
+	let mut out: Vec<String> = Vec::new();
+    for pos in bins {
+    	out.push(format!("{}:{}", &chr, &pos.to_string()));
+    }
+	out
+}
+

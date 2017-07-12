@@ -31,8 +31,8 @@ Usage:
   breakfast detect [options] <bam_file> <genome>
 
 Options:
-  --anchor-len=N     Anchor length for split read analysis [default: 30].
-  --max-frag-len=N   Maximum fragment length [default: 5000].
+  --anchor-len=N     Anchor length for split read analysis [default: 30]
+  --max-frag-len=N   Maximum fragment length [default: 5000]
 ";
 
 pub fn main() {

@@ -7,7 +7,7 @@ use std::env;
 use std::process::exit;
 use docopt::{Docopt, ArgvMap};
 
-mod detect;
+mod detect; mod filter;
 
 const USAGE: &'static str = "
 Breakfast is a software for detecting chromosomal rearrangements in DNA/RNA
@@ -28,7 +28,7 @@ fn main() {
 	let args: Vec<String> = env::args().collect();
 
 	if args.len() >= 2 && args[1] == "detect" { detect::main(); }
-	//else if args.len() >= 2 && args[1] == "filter" { filter::main(); }
+	else if args.len() >= 2 && args[1] == "filter" { filter::main(); }
 	//else if args.len() >= 2 && args[1] == "blacklist" { blacklist::main(); }
 	else { println!("{}", USAGE); exit(-1); }
 }
