@@ -5,7 +5,7 @@ use std::fs::File;
 use regex::Regex;
 use std::collections::HashMap;
 
-pub fn distance_to_gene(sv_pos: usize, gene_pos: usize) ->usize {
+pub fn distance_to_gene(sv_pos: usize, gene_pos: usize) -> usize {
     let mut dist: Vec<usize> = Vec::new();
     dist.push(0);
     dist.push(gene_pos - sv_pos);
@@ -16,7 +16,6 @@ pub fn distance_to_gene(sv_pos: usize, gene_pos: usize) ->usize {
 
 
 pub fn annotate(sv_path: String, bed_path: String) {
-    let sv_file_header: String = "CHROM\tSTRAND\tPOSITION\tNEARBY_FEATURES\t\tCHROM\tSTRAND\tPOSITION\tNEARBY_FEATURES\t\tNUM_SPANNING_FRAGMENTS\tNUM_SPANNING_MATES\tSPANNING_MATE_SEQUENCES".to_uppercase();
 
     let mut sv: Box<BufRead>;
     if sv_path == "-" {   // TODO: Make a function that handles this.
@@ -24,6 +23,10 @@ pub fn annotate(sv_path: String, bed_path: String) {
     } else {
     	sv = Box::new(BufReader::new(File::open(&sv_path).unwrap()));
     }
+
+	let mut header = String::new();
+	sv.read_line(&mut header);
+	print!("{}", header);
 
     let bed = BufReader::new(File::open(&bed_path).unwrap());
 
@@ -39,7 +42,6 @@ pub fn annotate(sv_path: String, bed_path: String) {
     }
 
     let re = Regex::new(r" \(ENSG.*?\)").unwrap();
-    println!("{}", sv_file_header);
 
     for l in sv.lines() {
 		let line: String = l.unwrap();

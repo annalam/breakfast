@@ -1,10 +1,10 @@
 [package]
 name = "breakfast"
 version = "0.1.0"
-authors = ["Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
+authors = ["Matti Annala <matti.annala@uta.fi>", "Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
 
 [dependencies]
-clap = "*"
+docopt = "*"
 bio = "*"
 regex = "*"
 rust-htslib = "*"
