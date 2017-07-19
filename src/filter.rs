@@ -1,5 +1,6 @@
 
 use parse_args;
+use ErrorHelper;
 use std::io::{BufRead, BufReader};
 use std::collections::HashSet;
 use std::fs::File;
@@ -10,7 +11,7 @@ Usage:
 
 Options:
   --min-reads=N     Minimum number of supporting reads [default: 0]
-  --blacklist=PATH  Path to blacklist file [default: '']
+  --blacklist=PATH  Path to blacklist file
 ";
 
 pub fn main() {
@@ -21,13 +22,13 @@ pub fn main() {
 
 	let mut blacklist = HashSet::new();
 	if !blacklist_path.is_empty() {
-		let bl = BufReader::new(File::open(&blacklist_path)
-			.expect("Could not open blacklist file."));
+		let bl = BufReader::new(File::open(&blacklist_path).on_error(
+			&format!("Could not open blacklist file '{}'.", blacklist_path)));
 		for line in bl.lines() { blacklist.insert(line.unwrap()); }
 	}
 
 	let mut sv_file = BufReader::new(File::open(&sv_path)
-		.expect("Could not open .sv file."));
+		.on_error("Could not open .sv file."));
 	let mut header = String::new();
 	sv_file.read_line(&mut header);
 	print!("{}", header);

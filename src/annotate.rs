@@ -1,21 +1,35 @@
-//src/annotate.rs
 
+use parse_args;
+use ErrorHelper;
 use std::io::{BufRead, BufReader, stdin};
 use std::fs::File;
-use regex::Regex;
-use std::collections::HashMap;
 
-pub fn distance_to_gene(sv_pos: usize, gene_pos: usize) -> usize {
-    let mut dist: Vec<usize> = Vec::new();
-    dist.push(0);
-    dist.push(gene_pos - sv_pos);
-    dist.push(sv_pos - gene_pos);
-    dist.sort_by(|a, b| b.cmp(a));
-    dist[1]
+const USAGE: &'static str = "
+Usage:
+  breakfast annotate [options] <sv_path> <bed_path>
+";
+
+fn distance(pos: u32, feature: &Feature) -> u32 {
+	if pos < feature.start {
+		feature.start - pos
+	} else if pos > feature.end {
+		pos - feature.end
+	} else {
+		0
+	}
 }
 
+struct Feature {
+	chr: String,
+	start: u32,   // 1-based position of first base
+	end: u32,     // 1-based position of last base
+	name: String
+}
 
-pub fn annotate(sv_path: String, bed_path: String) {
+pub fn main() {
+	let args = parse_args(USAGE);
+	let sv_path = args.get_str("<sv_path>");
+	let bed_path = args.get_str("<bed_path>");
 
     let mut sv: Box<BufRead>;
     if sv_path == "-" {   // TODO: Make a function that handles this.
@@ -29,81 +43,56 @@ pub fn annotate(sv_path: String, bed_path: String) {
 	print!("{}", header);
 
     let bed = BufReader::new(File::open(&bed_path).unwrap());
-
-    let mut features: Vec<String> = Vec::new();
-
-    for b in bed.lines() {
-        let line = b.unwrap();
-        let cols: Vec<&str> = line.split('\t').collect();
-        let mut feat: Vec<&str> = Vec::new();
-        feat.push(cols[0]); feat.push(cols[5]);
-        feat.push(cols[1]);feat.push(cols[2]); feat.push(cols[3]);
-        features.push(feat.join("\t"));
+    let mut features: Vec<Feature> = Vec::new();
+    for l in bed.lines() {
+        let line = l.unwrap();
+        let mut cols = line.split('\t');
+        features.push(Feature {
+        	chr: cols.next().unwrap().to_string(),
+        	start: cols.next().unwrap().parse::<u32>().unwrap() + 1,
+        	end: cols.next().unwrap().parse().unwrap(),
+        	name: cols.next().unwrap().to_string()
+        });
     }
 
-    let re = Regex::new(r" \(ENSG.*?\)").unwrap();
-
     for l in sv.lines() {
-		let line: String = l.unwrap();
+		let line = l.unwrap();
 		if !line.starts_with("chr") { continue; }
 
-		let tokens: Vec<&str> = line.split('\t').collect();
-        let chr_1    = tokens[0];
-        let strand_1 = tokens[1];
-        let pos_1: usize = tokens[2].parse().unwrap();
+		let mut cols = line.split('\t');
+        let chr_1 = cols.next().unwrap();
+        let strand_1 = cols.next().unwrap();
+        let pos_1: u32 = cols.next().unwrap().parse().unwrap();
+        cols.next();
+        let chr_2 = cols.next().unwrap();
+        let strand_2 = cols.next().unwrap();
+        let pos_2: u32 = cols.next().unwrap().parse().unwrap();
+        cols.next();
+        let reads = cols.next().unwrap();
 
-        let chr_2    = tokens[4];
-        let strand_2 = tokens[5];
-        let pos_2: usize = tokens[6].parse().unwrap();
-
-        let mut nearby_features_1 = HashMap::new();
-        let mut nearby_features_2 = HashMap::new();
-
-        for f in &features {
-            let fe: Vec<&str> = f.split('\t').collect();
-            if fe[0] == chr_1 {
-                nearby_features_1.insert(re.replace(fe[4], "").to_string(), distance_to_gene(pos_1, fe[2].parse::<usize>().unwrap()));
-            }
+        let mut nearby_features_1: Vec<(u32, &Feature)> = Vec::new();
+        for feature in &features {
+        	if chr_1 != feature.chr { continue; }
+        	let dist = distance(pos_1, feature);
+        	if dist > 100_000 { continue; }
+        	nearby_features_1.push((dist, feature));
         }
+        nearby_features_1.sort_by_key(|x| x.0);
 
-        for f in &features {
-            let fe: Vec<&str> = f.split('\t').collect();
-            if fe[0] == chr_2 {
-                nearby_features_2.insert(re.replace(fe[4], "").to_string(), distance_to_gene(pos_2, fe[2].parse::<usize>().unwrap()));
-            }
+        let mut nearby_features_2: Vec<(u32, &Feature)> = Vec::new();
+        for feature in &features {
+        	if chr_2 != feature.chr { continue; }
+        	let dist = distance(pos_2, feature);
+        	if dist > 100_000 { continue; }
+        	nearby_features_2.push((dist, feature));
         }
+        nearby_features_2.sort_by_key(|x| x.0);
 
-        nearby_features_1.retain(|ref x, &mut v| v < 100_000);
-        nearby_features_2.retain(|ref x, &mut v| v < 100_000);
-
-        let mut sorted_1: Vec<String> = nearby_features_1.keys().cloned().collect();
-        		sorted_1.sort();
-		let mut sorted_2: Vec<String> = nearby_features_2.keys().cloned().collect();
-        		sorted_2.sort();
-
-		let mut nb_feat1 = HashMap::new();
-		let mut nb_feat2 = HashMap::new();
-
-		for key in &sorted_1 {
-			if nearby_features_1.contains_key(key) {
-				nb_feat1.insert(key, nearby_features_1.get(key).unwrap());
-			} else { continue; }
-		}
-
-		for key in sorted_2.iter() {
-			if nearby_features_2.contains_key(key) {
-				nb_feat2.insert(key, nearby_features_2.get(key).unwrap());
-			} else { continue; }
-		}
-
-		let mut nb1: Vec<String> = vec![];
-		let mut nb2: Vec<String> = vec![];
-
-		for (g, n) in nb_feat1 { nb1.push(format!("{} ({:?})", g, n)); }
-		for (g, n) in nb_feat2 { nb2.push(format!("{} ({:?})", g, n)); }
-        //TODO push nb1 and nb2 to tokens[3] and tokens[8]
-        //tokens[3] = &nb1[..].to_owned().join(",");
-        //FIXME above pushing not compiling "borrow error"
-        println!("{}\t{}\t{}\t{}\t{}", tokens[..3].join("\t"), nb1.join(", "), tokens[4..8].join("\t"), nb2.join(", "), tokens[8]);
+        print!("{}\t{}\t{}\t", chr_1, strand_1, pos_1);
+        for nf in nearby_features_1 { print!("{} ({}), ", nf.1.name, nf.0); }
+        print!("\t");
+        print!("{}\t{}\t{}\t", chr_2, strand_2, pos_2);
+        for nf in nearby_features_2 { print!("{} ({}), ", nf.1.name, nf.0); }
+        println!("\t{}", reads);
 	}
 }

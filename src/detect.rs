@@ -1,5 +1,6 @@
 
 use parse_args;
+use ErrorHelper;
 use std::mem::swap;
 use std::thread;
 use std::str;
@@ -10,7 +11,7 @@ use std::cmp::{min, Ordering};
 use std::io::{BufReader, BufWriter, BufRead, Write, stderr};
 use rust_htslib::bam;
 use rust_htslib::bam::Read as HTSRead;
-use bio;
+use bio::io::fasta;
 use bio::alphabets::dna;
 
 struct Evidence {
@@ -37,12 +38,13 @@ Options:
 
 pub fn main() {
 	let args = parse_args(USAGE);
-	let sam_path = args.get_str("<sam_path>").to_string();
-	let genome_path = args.get_str("<genome_path>");
+	let sam_path = args.get_str("<bam_file>").to_string();
+	let genome_path = args.get_str("<genome>");
 	let anchor_len: usize = args.get_str("--anchor-len").parse().unwrap();
 	let max_frag_len: usize = args.get_str("--max-frag-len").parse().unwrap();
 
-	let fasta = bio::io::fasta::Reader::from_file(format!("{}.fa", genome_path)).unwrap();
+	let fasta = fasta::Reader::from_file(format!("{}.fa", genome_path))
+		.on_error(&format!("Genome FASTA file {}.fa could not be read.", genome_path));
 	writeln!(stderr(), "Reading reference genome into memory...");
 	// FIXME: Use eprintln!() once it stabilizes...
 
@@ -55,14 +57,15 @@ pub fn main() {
     writeln!(stderr(), "Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
     let bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
-        .stdin(Stdio::piped()).stdout(Stdio::piped())
-        .spawn().expect("Could not start Bowtie process.");
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()
+        .on_error("Could not start Bowtie process.");
 
 	let mut bowtie_in = BufWriter::new(bowtie.stdin.unwrap());
 	let bowtie_out = BufReader::new(bowtie.stdout.unwrap());
 
 	thread::spawn(move || {
-		let bam = bam::Reader::from_path(&sam_path).unwrap();
+		let bam = bam::Reader::from_path(&sam_path)
+			.expect("");
 		for r in bam.records() {
 			let read = r.unwrap();
 			if read.is_unmapped() == false { continue; }
