@@ -56,7 +56,7 @@ pub fn main() {
     let bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped())
-        .spawn().unwrap();
+        .spawn().expect("Could not start Bowtie process.");
 
 	let mut bowtie_in = BufWriter::new(bowtie.stdin.unwrap());
 	let bowtie_out = BufReader::new(bowtie.stdout.unwrap());
