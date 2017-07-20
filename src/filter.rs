@@ -56,7 +56,7 @@ pub fn main() {
 }
 
 
-fn sv_locus_identifiers(chr: &str, pos: usize, resolution: i32) -> Vec<String> {
+pub fn sv_locus_identifiers(chr: &str, pos: usize, resolution: i32) -> Vec<String> {
     let bin: i32 = pos as i32 / resolution;
 	let mut bins: Vec<i32> = Vec::new();
     for i in bin-1..bin+2 as i32 {
@@ -69,4 +69,3 @@ fn sv_locus_identifiers(chr: &str, pos: usize, resolution: i32) -> Vec<String> {
     }
 	out
 }
-

@@ -1,19 +1,24 @@
+use parse_args;
 use std::io::{BufRead, BufReader};
 use std::fs::File;
 use std::collections::HashSet;
 
 use filter::sv_locus_identifiers as sv_locus_identifiers;
 
-pub fn natural_sorted(blacklist: HashSet<String>) -> HashSet<String> {
-    let mut v: Vec<String> = blacklist.into_iter().collect();
-    v.sort_by(|a, b| a.cmp(b)); 
-    let out: HashSet<_> = v.into_iter().collect();
-    out
-}
+const USAGE: &'static str = "
+Usage:
+  breakfast blacklist [options] <sv_files>...
 
-pub fn generate_blacklist(sv_files: Vec<&str>, min_freq: usize) {
+Options:
+  --freq-above=FREQ     Minimum samples to consider [default: 0]
+";
+
+pub fn main() {
+    let args = parse_args(USAGE);
+    let min_frequency: f32 = args.get_str("--freq-above").parse().unwrap();
+	let sv_files = args.get_vec("<sv_files>").to_vec();
+
     println!("Total samples  {}", sv_files.len());
-
     let mut sample_variants: Vec<HashSet<String>> = Vec::with_capacity(sv_files.len());
 
     println!("Before {}", sample_variants.len());
@@ -39,22 +44,29 @@ pub fn generate_blacklist(sv_files: Vec<&str>, min_freq: usize) {
         }
     }
 
+     let variants_cp = sample_variants.to_vec();
      let mut blacklist: HashSet<String> = HashSet::new();
      for loci in sample_variants {
         for l in loci {
          blacklist.insert(l);
         }
      }
-   
      blacklist = natural_sorted(blacklist);
-    
+
     let mut frequency: Vec<usize> = vec![0; blacklist.len()];
-    for (k, bad_variant) in enumerate(blacklist) {
+    for (k, bad_variant) in blacklist.iter().enumerate() {
         let bad_in_sample: Vec<usize> = Vec::new();
-        }
     }
 
-    println!("{:?}", frequency);
-    println!("{:?}", &blacklist.len());
+    //println!("{:?}", frequency);
+    //println!("{:?}", &blacklist.len());
 
+}
+
+
+pub fn natural_sorted(blacklist: HashSet<String>) -> HashSet<String> {
+    let mut v: Vec<String> = blacklist.into_iter().collect();
+    v.sort_by(|a, b| a.cmp(b));
+    let out: HashSet<_> = v.into_iter().collect();
+    out
 }
