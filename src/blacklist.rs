@@ -10,13 +10,14 @@ Usage:
   breakfast blacklist [options] <sv_files>...
 
 Options:
-  --freq-above=FREQ     Minimum samples to consider [default: 0]
+  --freq-above=FREQ     Minimum samples(0.0 - 1.0) to consider [default: 0.0]
 ";
 
 pub fn main() {
 
     let args = parse_args(USAGE);
-    let min_frequency: f32 = args.get_str("--freq-above").parse().unwrap();
+    let min_frequency: f32 = args.get_str("--freq-above").parse()
+        .expect("\tERROR: *** Invalid frequency! *** \n");
 	let sv_files = args.get_vec("<sv_files>").to_vec();
     let mut sample_variants: Vec<HashSet<String>> = Vec::new();
 
@@ -68,7 +69,7 @@ pub fn main() {
 
 
     for (x, loci) in blacklist.iter().enumerate() {
-        if frequency[x] >= min_frequency{
+        if frequency[x] >= min_frequency {
             println!("{}", loci);
         }
     }
