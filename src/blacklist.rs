@@ -46,21 +46,31 @@ pub fn main() {
 
      let variants_cp = sample_variants.to_vec();
      let mut blacklist: HashSet<String> = HashSet::new();
-     for loci in sample_variants {
+     for loci in variants_cp {
         for l in loci {
          blacklist.insert(l);
         }
      }
      blacklist = natural_sorted(blacklist);
 
-    let mut frequency: Vec<usize> = vec![0; blacklist.len()];
+    let mut frequency: Vec<f32> = vec![0.0; blacklist.len()];
     for (k, bad_variant) in blacklist.iter().enumerate() {
-        let bad_in_sample: Vec<usize> = Vec::new();
+        let mut bad_in_sample: Vec<usize> = vec![0; sample_variants.len()];
+        for (n, loci) in sample_variants.iter().enumerate() {
+            if loci.contains(bad_variant) {
+                bad_in_sample[n] = 1;
+                }
+            }
+        let sum: usize = bad_in_sample.iter().sum();
+        frequency[k]   = (sum / bad_in_sample.len()) as f32;
+        println!("{}\t{}\t{}\t{}", sum, bad_in_sample.len(), frequency[k], min_frequency);
     }
+
+
+
 
     //println!("{:?}", frequency);
     //println!("{:?}", &blacklist.len());
-
 }
 
 
