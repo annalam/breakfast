@@ -19,7 +19,7 @@ pub fn main() {
     let min_frequency: f32 = args.get_str("--freq-above").parse()
         .expect("\tERROR: *** Invalid frequency! *** \n");
 	let sv_files = args.get_vec("<sv_files>").to_vec();
-    let mut sample_variants: Vec<HashSet<String>> = Vec::new();
+    let mut sample_variants: Vec<Vec<String>> = vec![Vec::new(); sv_files.len()];
 
     for (s, sv_file) in sv_files.iter().enumerate() {
 
@@ -33,16 +33,22 @@ pub fn main() {
             let tokens: Vec<&str> = line.split('\t').collect();
             let chrom = tokens[0];
             let pos: usize = tokens[2].parse().unwrap();
-            let tmp1: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
+            let tmp1: Vec<String> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
+            sample_variants[s].append(&mut tmp1.to_vec());
 
             let chrom = tokens[5];
             let pos: usize = tokens[7].parse().unwrap();
-            let tmp2: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
 
-            tmp = tmp1.union(&tmp2).cloned().collect();
+            let tmp2: Vec<String> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
+            sample_variants[s].append(&mut tmp2.to_vec());
+
+            //tmp = tmp1.union(&tmp2).cloned().collect();
+            //println!("{}", tmp.len());
+            //sample_variants[s] = tmp;
         }
-        sample_variants.push(tmp);
+
     }
+
 
      let variants_cp = sample_variants.to_vec();
      let mut blacklist: HashSet<String> = HashSet::new();
@@ -52,7 +58,7 @@ pub fn main() {
         }
      }
      blacklist = natural_sorted(blacklist);
-
+     println!("blacklist before filtering {}", blacklist.len());
 
      let mut frequency: Vec<f32> = vec![0.0; blacklist.len()];
      for (k, bad_variant) in blacklist.iter().enumerate() {
