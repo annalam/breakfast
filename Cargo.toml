@@ -2,11 +2,11 @@
 name = "breakfast"
 version = "0.1.0"
 authors = ["Matti Annala <matti.annala@uta.fi>", "Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
-description = ""
+description = "BreakFast is a toolkit for detecting chromosomal rearrangements based on RNA-seq data"
 readme = "README.md"
-keywords = ["breakfast", "RNA-Seq", "fusion genes", "bioinformatics", "rearrangements", "sequencing"]
+keywords = ["breakfast", "RNA-Seq", "fusion-genes", "bioinformatics", "rearrangements", "sequencing"]
 license = "MIT"
-repository = "https://github.com/rust-bio/rust-htslib.git"
+repository = "https://github.com/mgvel/breakfast.rs.git"
 
 [dependencies]
 docopt = "*"
