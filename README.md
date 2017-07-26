@@ -1,29 +1,34 @@
-BreakFast is a toolkit for detecting chromosomal rearrangements
-based on RNA-seq data.
+
+Introduction
+------------
+BreakFast is a toolkit for detecting chromosomal rearrangements based on RNA-seq data.
+
 
 Getting started
-===============
+---------------
+
 
 Requirements
-============
+------------
 - [samtools](http://samtools.sourceforge.net/)
 - [bowtie](http://bowtie-bio.sourceforge.net/index.shtml)
 
 
+
 Unix Binary
-============
+-----------
 - Download release
 
 
 Compile from source
-===================
+-------------------
 - install [Rust](https://www.rust-lang.org/en-US/)
 ```
-	git clone https://github.com/mgvel/breakfast.rs.git
+git clone https://github.com/mgvel/breakfast.rs.git
 
-	cd breakfast.rs
+cd breakfast.rs
 
-	cargo build --release
+cargo build --release
 ```
 Run with
 
@@ -37,11 +42,17 @@ Or copy to your binaries location
 ```
 
 
-Detailed description of algorithm
-=================================
+Examples
+--------
+
+
+
+Algorithm
+---------
+
 
 TODO
-====
+----
 - Write "Getting started" documentation for the tool.
 - Document and test how Breakfast can be run on CRAM files (use samtools view to convert to BAM, then pipe into Breakfast).
 - Allow '-' to be used as BAM file name, to read from STDIN.
