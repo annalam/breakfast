@@ -2,6 +2,11 @@
 name = "breakfast"
 version = "0.1.0"
 authors = ["Matti Annala <matti.annala@uta.fi>", "Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
+description = ""
+readme = "README.md"
+keywords = ["breakfast", "RNA-Seq", "fusion genes", "bioinformatics", "rearrangements", "sequencing"]
+license = "MIT"
+repository = "https://github.com/rust-bio/rust-htslib.git"
 
 [dependencies]
 docopt = "*"
