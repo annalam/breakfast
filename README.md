@@ -1,4 +1,3 @@
-
 Introduction
 ------------
 BreakFast is a toolkit for detecting chromosomal rearrangements based on RNA-seq data.
@@ -53,7 +52,7 @@ Algorithm
 ---------
 
 
-TODO 
+TODO
 ----
 - [ ] Write "Getting started" documentation for the tool.
 - [ ] Document and test how Breakfast can be run on CRAM files (use samtools view to convert to BAM, then pipe into Breakfast).
