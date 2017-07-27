@@ -18,7 +18,7 @@ pub fn main() {
     let args = parse_args(USAGE);
     let min_frequency: f32 = args.get_str("--freq-above").parse()
         .expect("\tERROR: *** Invalid frequency! *** \n");
-	let sv_files = args.get_vec("<sv_files>").to_vec();
+    let sv_files = args.get_vec("<sv_files>").to_vec();
     let mut sample_variants: Vec<Vec<String>> = vec![Vec::new(); sv_files.len()];
 
     for (s, sv_file) in sv_files.iter().enumerate() {
@@ -58,7 +58,7 @@ pub fn main() {
         }
      }
      blacklist = natural_sorted(blacklist);
-     println!("blacklist before filtering {}", blacklist.len());
+     eprintln!("blacklist loci before filtering {}", blacklist.len());
 
      let mut frequency: Vec<f32> = vec![0.0; blacklist.len()];
      for (k, bad_variant) in blacklist.iter().enumerate() {

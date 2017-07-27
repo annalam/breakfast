@@ -15,7 +15,7 @@ Installation
 
 
 
-**Unix Binary**
+**Pre-built unix Binary**
 
 - Download release
 
