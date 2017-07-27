@@ -45,8 +45,8 @@ pub fn main() {
 
 	let fasta = fasta::Reader::from_file(format!("{}.fa", genome_path))
 		.on_error(&format!("Genome FASTA file {}.fa could not be read.", genome_path));
-	writeln!(stderr(), "Reading reference genome into memory...");
-	// FIXME: Use eprintln!() once it stabilizes...
+	eprintln!("Reading reference genome into memory...");
+
 
 	let mut genome = HashMap::new();
 	for entry in fasta.records() {
@@ -54,7 +54,7 @@ pub fn main() {
 		genome.insert(chr.id().to_owned(), chr.seq().to_owned());
 	}
 
-    writeln!(stderr(), "Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
+    eprintln!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
     let bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()
@@ -217,9 +217,9 @@ pub fn main() {
 			signature: signature, frag_start_pos: frag_start_pos });
     }
 
-    writeln!(stderr(), "Found {} rearrangement supporting reads.", evidence.len());
+    eprintln!("Found {} rearrangement supporting reads.", evidence.len());
 
-    writeln!(stderr(), "Sorting rearrangement supporting reads by position...");
+    eprintln!("Sorting rearrangement supporting reads by position...");
     evidence.sort_by(|a,b|
     	if a.chr < b.chr { Ordering::Less }
     	else if a.chr > b.chr { Ordering::Greater }
@@ -227,7 +227,7 @@ pub fn main() {
     	else if a.pos > b.pos { Ordering::Greater }
     	else { Ordering::Equal });
 
-    writeln!(stderr(), "Identifying rearrangements based on clusters of discordant reads...");
+    eprintln!("Identifying rearrangements based on clusters of discordant reads...");
     println!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tCHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tSUPPORTING READS");
     let mut reported = vec![false; evidence.len()];
     for p in 0..evidence.len() {

@@ -49,7 +49,8 @@ impl<T> ErrorHelper<T> for Option<T> {
 	fn on_error(self, msg: &str) -> T {
 		match self {
 			Some(x) => x,
-			None => { writeln!(stderr(), "ERROR: {}\n", msg); exit(-1) }
+			//None => { writeln!(stderr(), "ERROR: {}\n", msg); exit(-1) }
+			None => { eprintln!("ERROR: {}\n", msg); exit(-1) }
 		}
 	}
 }
@@ -58,7 +59,8 @@ impl<T, E> ErrorHelper<T> for Result<T, E> {
 	fn on_error(self, msg: &str) -> T {
 		match self {
 			Ok(x) => x,
-			Err(_) => { writeln!(stderr(), "ERROR: {}\n", msg); exit(-1) }
+			//Err(_) => { writeln!(stderr(), "ERROR: {}\n", msg); exit(-1) }
+			Err(_) => { eprintln!("ERROR: {}\n", msg); exit(-1) }
 		}
 	}
 }
