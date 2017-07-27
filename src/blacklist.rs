@@ -24,7 +24,7 @@ pub fn main() {
     for (s, sv_file) in sv_files.iter().enumerate() {
 
         let sv = BufReader::new(File::open(&sv_file).unwrap());
-        let mut tmp: HashSet<String> = HashSet::new();
+        //let mut tmp: HashSet<String> = HashSet::new();
 
         for l in sv.lines() {
             let line = l.unwrap();
