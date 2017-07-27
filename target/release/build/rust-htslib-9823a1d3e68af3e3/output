@@ -1,2 +1,0 @@
-make: Nothing to be done for `lib-static'.
-cargo:rustc-flags=-L /homeappl/home/granavel/.cargo/registry/src/github.com-1ecc6299db9ec823/rust-htslib-0.12.1/htslib -l static=hts -l z
