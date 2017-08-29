@@ -1,6 +1,5 @@
 
 use parse_args;
-use ErrorHelper;
 use std::io::{BufRead, BufReader, stdin};
 use std::fs::File;
 

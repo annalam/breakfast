@@ -6,7 +6,6 @@ extern crate regex;
 
 use std::env;
 use std::process::exit;
-use std::io::{Write, stderr};
 use docopt::{Docopt, ArgvMap};
 
 mod detect; mod filter; mod annotate; mod blacklist;
@@ -41,6 +40,7 @@ pub fn parse_args(usage: &str) -> ArgvMap {
 		on_error(&format!("Invalid arguments.\n{}", usage))
 }
 
+// Helper methods for error reporting
 trait ErrorHelper<T> {
 	fn on_error(self, msg: &str) -> T;
 }

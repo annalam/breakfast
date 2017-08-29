@@ -8,7 +8,7 @@ use std::process::{Command, Stdio};
 use std::collections::HashMap;
 use std::ascii::AsciiExt;
 use std::cmp::{min, Ordering};
-use std::io::{BufReader, BufWriter, BufRead, Write, stderr};
+use std::io::{BufReader, BufWriter, BufRead, Write};
 use rust_htslib::bam;
 use rust_htslib::bam::Read as HTSRead;
 use bio::io::fasta;
@@ -34,6 +34,7 @@ Usage:
 Options:
   --anchor-len=N     Anchor length for split read analysis [default: 30]
   --max-frag-len=N   Maximum fragment length [default: 5000]
+  --count-dups       Count duplicate DNA fragments as independent evidence
 ";
 
 pub fn main() {
@@ -42,11 +43,11 @@ pub fn main() {
 	let genome_path = args.get_str("<genome>");
 	let anchor_len: usize = args.get_str("--anchor-len").parse().unwrap();
 	let max_frag_len: usize = args.get_str("--max-frag-len").parse().unwrap();
+	let count_duplicates = true;  // TODO: args.get_bool("--count-dups");
 
 	let fasta = fasta::Reader::from_file(format!("{}.fa", genome_path))
 		.on_error(&format!("Genome FASTA file {}.fa could not be read.", genome_path));
 	eprintln!("Reading reference genome into memory...");
-
 
 	let mut genome = HashMap::new();
 	for entry in fasta.records() {
@@ -66,20 +67,16 @@ pub fn main() {
 	thread::spawn(move || {
 		let bam = bam::Reader::from_path(&sam_path)
 			.expect("");
-		for r in bam.records() {
-			let read = r.unwrap();
-			if read.is_unmapped() == false { continue; }
-			if read.seq().len() < anchor_len * 2 { continue; }
-			let read_id = str::from_utf8(read.qname()).unwrap();
-			let seq = if read.is_reverse() {
-				dna::revcomp(&read.seq().as_bytes())
-			} else {
-				read.seq().as_bytes()
-			};
-	 		let tail = seq.len() - anchor_len;
-			write!(bowtie_in, ">{}#1\n{}\n>{}#{}\n{}", &read_id, str::from_utf8(&seq[..anchor_len]).unwrap(), &read_id, str::from_utf8(&seq).unwrap(), str::from_utf8(&seq[tail..]).unwrap());
-	    }
-    });
+
+		// TODO: Implement a filter here that will throw away reads with
+		// low overall BASEQ score or low DNA complexity?
+
+		if count_duplicates {
+			extract_unaligned_reads_without_frag_id(&bam, &mut bowtie_in, anchor_len);
+		} else {
+			extract_unaligned_reads_with_frag_id(&bam, &mut bowtie_in, anchor_len);
+		}
+	});
 
     let mut evidence: Vec<Evidence> = Vec::new();
     let mut prev = String::new();
@@ -129,8 +126,6 @@ pub fn main() {
         // If the read is at the very edge of a chromosome, ignore it.
 		if pos + full_len >= genome[chr].len() { continue; }
 		if mpos + full_len >= genome[mchr].len() { continue; }
-		//if pos < full_len { continue; }
-		//if mpos < full_len { continue; }
 
 		let left_grch = if strand == true {
 			genome[chr][pos-1..pos+full_len-1].to_vec()
@@ -192,14 +187,11 @@ pub fn main() {
 			junction[k+1] = if seq[k] == right_grch[k] { seq[k] } else { seq[k].to_ascii_lowercase() };
 		}
 
-		let mut signature = vec![' ' as u8; 7];   // 3 bp from both flanks
-		signature[0] = left_grch[bp - 3];
-		signature[1] = left_grch[bp - 2];
-		signature[2] = left_grch[bp - 1];
+		// Construct a breakpoint signature, composed of 5 bp from both flanks
+		let mut signature = vec![' ' as u8; 11];
+		for k in 0..5 { signature[k] = left_grch[bp - 5 + k]; }
 		signature[3] = '|' as u8;
-		signature[4] = right_grch[bp];
-		signature[5] = right_grch[bp + 1];
-		signature[6] = right_grch[bp + 2];
+		for k in 0..5 { signature[6 + k] = right_grch[bp + k]; }
 
 		// These were used for debugging junction printing.
 		//println!(" Sequence: {}", str::from_utf8(&seq).unwrap());
@@ -271,6 +263,54 @@ pub fn main() {
 	}
 }
 
+fn extract_unaligned_reads_with_frag_id(bam: &bam::Reader, bowtie_in: &mut Write, anchor_len: usize) {
+
+	// TODO: To better account for duplicate DNA fragments, we should
+	// associate every read with a "fragment ID", defined as two 10 bp
+	// sequences: the first 10 bp of mate #1, and the first 10 bp of
+	// mate #2. Using these fragment IDs, we can reliably only count
+	// unique DNA fragments when determining support for rearrangements.
+	// 
+	// For a position-sorted BAM file, this means that we must
+	// hold on to BAM records until we encounter its mate. Luckily, we
+	// only need to hold on to BAM records for unaligned reads and their
+	// mates. We do not need to hold on to BAM records for all reads.
+
+	for r in bam.records() {
+		let read = r.unwrap();
+		if read.is_unmapped() == false { continue; }
+		if read.seq().len() < anchor_len * 2 { continue; }
+
+		let read_id = str::from_utf8(read.qname()).unwrap();
+
+		let mut frag_signature = vec![' ' as u8; 21];
+		for k in 0..10 { frag_signature[k] = 'A' as u8; }
+
+		let seq = if read.is_reverse() {
+			dna::revcomp(&read.seq().as_bytes())
+		} else {
+			read.seq().as_bytes()
+		};
+ 		let tail = seq.len() - anchor_len;
+		write!(bowtie_in, ">{}#1\n{}\n>{}#{}\n{}", &read_id, str::from_utf8(&seq[..anchor_len]).unwrap(), &read_id, str::from_utf8(&seq).unwrap(), str::from_utf8(&seq[tail..]).unwrap());
+    }
+}
+
+fn extract_unaligned_reads_without_frag_id(bam: &bam::Reader, bowtie_in: &mut Write, anchor_len: usize) {
+	for r in bam.records() {
+		let read = r.unwrap();
+		if read.is_unmapped() == false { continue; }
+		if read.seq().len() < anchor_len * 2 { continue; }
+		let read_id = str::from_utf8(read.qname()).unwrap();
+		let seq = if read.is_reverse() {
+			dna::revcomp(&read.seq().as_bytes())
+		} else {
+			read.seq().as_bytes()
+		};
+ 		let tail = seq.len() - anchor_len;
+		write!(bowtie_in, ">{}#1\n{}\n>{}#{}\n{}", &read_id, str::from_utf8(&seq[..anchor_len]).unwrap(), &read_id, str::from_utf8(&seq).unwrap(), str::from_utf8(&seq[tail..]).unwrap());
+    }
+}
 
 fn remove_duplicate_evidence(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 	let mut checked = vec![false; evidence.len()];

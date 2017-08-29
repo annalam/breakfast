@@ -36,8 +36,8 @@ pub fn main() {
             let tmp1: Vec<String> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
             sample_variants[s].append(&mut tmp1.to_vec());
 
-            let chrom = tokens[5];
-            let pos: usize = tokens[7].parse().unwrap();
+            let chrom = tokens[4];
+            let pos: usize = tokens[6].parse().unwrap();
 
             let tmp2: Vec<String> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
             sample_variants[s].append(&mut tmp2.to_vec());
