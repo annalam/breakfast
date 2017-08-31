@@ -1,55 +1,34 @@
 Introduction
 ------------
+
 BreakFast is a toolkit for detecting chromosomal rearrangements based on RNA-seq data.
 
-
-Getting started
----------------
 Installation
 ------------
 
-**Requirements**
+The easiest way to install Breakfast is to download one of the pre-built binary packages:
+- Breakfast 0.1 (x86-64 Linux)
 
-- [samtools](http://samtools.sourceforge.net/)
-- [bowtie](http://bowtie-bio.sourceforge.net/index.shtml)
-
-
-
-**Pre-built unix Binary**
-
-- Download release
-
-
-**Compile from source**
-
-- install [Rust](https://www.rust-lang.org/en-US/)
+If a suitable binary package is not available, you can also build Breakfast directly from source code. Note that installing this way requires a Rust compiler and the Cargo build system to be available:
 ```
 git clone https://github.com/mgvel/breakfast.rs.git
-
 cd breakfast.rs
+cargo install --release
+```
 
-cargo build --release
-```
-Run with
-
-```
-	./target/release/breakfast
-```
-Or copy to your binaries location
-
-```
-	cp ./target/release/breakfast [DESTINATION-PATH]
-```
 
 Running Breakfast
 -----------------
 
-**Examples**
+```
+breakfast detect tumor.bam bowtie_indexes/hg38 > tumor.sv
+```
 
 
 
-Algorithm
----------
+
+Detailed overview of the Breakfast algorithm
+--------------------------------------------
 
 
 TODO
