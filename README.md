@@ -1,15 +1,15 @@
 Introduction
 ------------
 
-BreakFast is a toolkit for detecting chromosomal rearrangements based on RNA-seq data.
+BreakFast is a toolkit for detecting structural variants from DNA or RNA sequencing data.
 
 Installation
 ------------
 
 The easiest way to install Breakfast is to download one of the pre-built binary packages:
-- Breakfast 0.1 (x86-64 Linux)
+- BreakFast 0.1 (x86-64 Linux)
 
-If a suitable binary package is not available, you can also build Breakfast directly from source code. Note that installing this way requires a Rust compiler and the Cargo build system to be available:
+If a suitable binary package is not available, you can also build BreakFast directly from source code. Note that installing this way requires a Rust compiler and the Cargo build system to be available:
 ```
 git clone https://github.com/mgvel/breakfast.rs.git
 cd breakfast.rs
@@ -20,6 +20,7 @@ cargo install --release
 Running Breakfast
 -----------------
 
+To run BreakFast, you need a BAM file containing sequenced reads (in this example, tumor.bam). You also need a Bowtie index and the Bowtie1 executable in your PATH. A BreakFast analysis begins with the "breakfast detect" command, which searches the BAM file for unaligned reads that support a genomic breakpoint:
 ```
 breakfast detect tumor.bam bowtie_indexes/hg38 > tumor.sv
 ```
