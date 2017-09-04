@@ -217,7 +217,7 @@ pub fn main() {
     	else { Ordering::Equal });
 
     eprintln!("Identifying rearrangements based on clusters of discordant reads...");
-    println!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tCHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tSUPPORTING READS");
+    println!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tCHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tSUPPORTING READS\tNOTES");
     let mut reported = vec![false; evidence.len()];
     for p in 0..evidence.len() {
     	// We skip reads that were already incorporated into some cluster.
@@ -434,58 +434,29 @@ fn remove_duplicates_based_on_frag_signature(evidence: Vec<&Evidence>) -> Vec<&E
 }
 
 fn remove_duplicates_based_on_frag_id(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
-	evidence
-}
-
-/*
-fn remove_duplicate_evidence(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
-	let mut checked = vec![false; evidence.len()];
 	let mut filtered: Vec<&Evidence> = Vec::new();
-
-	for (e, read) in evidence.iter().enumerate() {
-		// If the read was already found to be a redundant source of evidence,
-		// we don't need to check for redundancy again.
-		if checked[e] { continue; }
-
-		// We consider two reads to be redundant sources of evidence for a
-		// genomic rearrangement if they come from the same original DNA
-		// fragment (e.g. two paired end mates from the same fragment).
-		// Also, we consider them to be redundant if they share the same
-		// start position (as in this case they likely arise from PCR or
-		// optical duplicates).
-		let mut todo_edges = vec![read.frag_start_pos];
-		let mut todo_frag_ids = vec![read.frag_id.clone()];
-		let mut redundant = vec![e];
-		while !todo_edges.is_empty() || !todo_frag_ids.is_empty() {
-			if let Some(edge) = todo_edges.pop() {
-				for k in e+1..evidence.len() {
-					if checked[k] { continue; }
-					if evidence[k].frag_start_pos == edge {
-						checked[k] = true;
-						redundant.push(k);
-						todo_frag_ids.push(evidence[k].frag_id.clone());
-					}
-				}
-			}
-
-			if let Some(frag_id) = todo_frag_ids.pop() {
-				for k in e+1..evidence.len() {
-					if checked[k] { continue; }
-					if evidence[k].frag_id == frag_id {
-						checked[k] = true;
-						redundant.push(k);
-						todo_edges.push(evidence[k].frag_start_pos);
-					}
-				}
+	let mut redundant_with = vec![-1i32; evidence.len()];
+	for a in 0..evidence.len() {
+		if redundant_with[a] != -1 { continue; }
+		redundant_with[a] = a as i32;
+		let mut num_redundant = 1;
+		for b in a+1..evidence.len() {
+			if redundant_with[b] != -1 { continue; }
+			if evidence[a].frag_signature == evidence[b].frag_signature {
+				redundant_with[b] = a as i32;
+				num_redundant += 1;
 			}
 		}
+
+		if num_redundant == 1 { filtered.push(evidence[a]); continue; }
 
 		// Now we have a list of redundant reads. Since we can only keep
 		// one of these reads as a source of evidence, we pick the "best"
 		// one. Currently this means the one with the longest flanks.
 		let mut best = 0;
 		let mut best_score = 0;
-		for k in redundant {
+		for k in 0..evidence.len() {
+			if redundant_with[k] == a as i32 { continue; }
 			let seq = &evidence[k].sequence;
 			let left_len = seq.iter().position(|c| *c == '|' as u8).unwrap();
 			let right_len = seq.len() - left_len - 1;
@@ -496,11 +467,7 @@ fn remove_duplicate_evidence(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 		}
 		filtered.push(evidence[best]);
 	}
-
-	/*if filtered.len() > 1 {
-		for read in &evidence {
-			println!("{}\t{}", read.frag_start_pos, read.frag_id);
-		}
-	}*/
 	filtered
-}*/
+}
+
+
