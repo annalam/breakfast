@@ -7,13 +7,14 @@ use std::str;
 use std::process::{Command, Stdio};
 use std::collections::HashMap;
 use std::ascii::AsciiExt;
-use std::cmp::{min, Ordering};
+use std::cmp::{min, max, Ordering};
 use std::io::{BufReader, BufWriter, BufRead, Write};
 use rust_htslib::bam;
 use rust_htslib::bam::Read as HTSRead;
 use bio::io::fasta;
 use bio::alphabets::dna;
 
+#[derive(Debug)]
 struct Evidence {
 	chr: String,
 	pos: usize,            // Leftmost position of anchor #1 alignment
@@ -33,6 +34,7 @@ Usage:
 Options:
   --anchor-len=N       Anchor length for split read analysis [default: 30]
   --max-frag-len=N     Maximum fragment length [default: 5000]
+  --min-evidence=N     Minimum number of supporting DNA fragments [default: 2]
   --remove-duplicates  Remove duplicates based on fragment boundaries
 ";
 
@@ -42,6 +44,7 @@ pub fn main() {
 	let genome_path = args.get_str("<genome>");
 	let anchor_len: usize = args.get_str("--anchor-len").parse().unwrap();
 	let max_frag_len: usize = args.get_str("--max-frag-len").parse().unwrap();
+	let min_evidence: usize = args.get_str("--min-evidence").parse().unwrap();
 	let remove_duplicates = args.get_bool("--remove-duplicates");
 
 	let fasta = fasta::Reader::from_file(format!("{}.fa", genome_path))
@@ -54,6 +57,7 @@ pub fn main() {
 		genome.insert(chr.id().to_owned(), chr.seq().to_owned());
 	}
 
+	// TODO: Handle reads with multiple alignments...
     eprintln!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
     let bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
@@ -65,7 +69,7 @@ pub fn main() {
 
 	thread::spawn(move || {
 		let bam = bam::Reader::from_path(&sam_path)
-			.expect("");
+			.on_error("Could not open BAM file.");
 
 		if remove_duplicates {
 			dispatch_unaligned_reads_with_frag_signature(&bam, &mut bowtie_in, anchor_len);
@@ -108,7 +112,7 @@ pub fn main() {
         let mut mpos: usize = mcols.next().unwrap().parse().unwrap();
 
        	// Do not report rearrangements involving mitochondrial DNA
-	 	if chr.contains('M') || mchr.contains('M') { continue; }
+	 	//if chr.contains('M') || mchr.contains('M') { continue; }
 
 	 	// Reorient the read so that anchor #1 has the lower coordinate.
 	 	// This simplifies downstream analysis where we cluster the
@@ -187,17 +191,8 @@ pub fn main() {
 		// Construct a breakpoint signature, composed of 5 bp from both flanks
 		let mut signature = vec![' ' as u8; 11];
 		for k in 0..5 { signature[k] = left_grch[bp - 5 + k]; }
-		signature[3] = '|' as u8;
+		signature[5] = '|' as u8;
 		for k in 0..5 { signature[6 + k] = right_grch[bp + k]; }
-
-		// These were used for debugging junction printing.
-		//println!(" Sequence: {}", str::from_utf8(&seq).unwrap());
-		//println!(" Left ref: {}", str::from_utf8(&left_grch).unwrap());
-		//println!("Right ref: {}", str::from_utf8(&right_grch).unwrap());
-		//println!(" Junction: {}", str::from_utf8(&junction).unwrap());
-		//println!("Mismatches: {:?}", mismatches);
-		//println!("Least mismatches at: {}", bp);
-		//println!("-----");
 
 		evidence.push(Evidence {
 			chr: chr.to_string(), pos: pos, strand: strand,
@@ -245,13 +240,23 @@ pub fn main() {
     		reported[s] = true;
     	}
 
-    	if cluster.len() < 2 { continue; }
+    	/*if read.signature == "CAAAT|CTGTG".as_bytes() {
+    		println!("Evidence for CAAAT|CTGTG:");
+    		for r in &cluster {
+    			println!("{} ({})", str::from_utf8(&r.sequence).unwrap(),
+    				str::from_utf8(&r.frag_signature).unwrap());
+    		}
+    	} else {
+    		continue;
+    	}*/
+
+    	if cluster.len() < min_evidence { continue; }
     	if remove_duplicates {
     		cluster = remove_duplicates_based_on_frag_signature(cluster);
     	} else {
     		cluster = remove_duplicates_based_on_frag_id(cluster);
     	}
-    	if cluster.len() < 3 { continue; }
+    	if cluster.len() < min_evidence { continue; }
 
     	print!("{}\t{}\t{}\t\t{}\t{}\t{}\t\t",
     		read.chr, if read.strand { '+' } else { '-' }, read.pos,
@@ -277,18 +282,27 @@ struct Mate {
 
 fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &mut Write, anchor_len: usize) {
 
-	// To better account for duplicate DNA fragments, we associate
-	// every read with a "fragment signature", defined as two 10 bp
-	// sequences: the first 10 bp of mate #1, and the first 10 bp of
-	// mate #2. Using these fragment signatures, we can ignore duplicate
-	// DNA fragments when determining support for rearrangements.
-	// 
-	// For a position-sorted BAM file, this means that we must
-	// hold on to BAM records until we encounter its mate. Luckily, we
-	// only need to hold on to BAM records for unaligned reads and their
-	// mates. We do not need to hold on to BAM records for all reads.
+	// We do not want to count PCR duplicates of the same DNA fragment as
+	// independent sources of evidence for a rearrangement. To prevent that,
+	// we mark each read with a "fragment signature" that identifies the
+	// DNA fragment from which it originated. In the absence of unique
+	// molecular identifiers (UMI), DNA fragments can only be identified
+	// based on their boundaries. Two distinct DNA fragments from the original
+	// biological sample are unlikely to have their boundaries at the exact
+	// same chromosomal coordinates. In rearrangement analysis, the evidence
+	// for rearrangements often comes in the form of unaligned reads.
+	// This means that we cannot identify DNA fragments based on their aligned
+	// position. Instead, we identify DNA fragments based on the DNA sequences
+	// found at their 5' and 3' ends. In Breakfast, we extract 10 bp sequences
+	// from both ends of the DNA fragment, and use them as the
+	// "fragment signature".
 
+	// To associate each unaligned read with a "fragment signature", we must
+	// have access to both mates of the paired read. In a position-sorted BAM
+	// file, the mates are often not adjacent in the file. We must
+	// therefore keep track of a read's sequence until we encounter its mate.
 	let mut mates: HashMap<Vec<u8>, Mate> = HashMap::new();
+
 	let mut num_reads_sent = 0;
 
 	for r in bam.records() {
@@ -296,22 +310,14 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 
 		// For single end reads, we cannot identify fragment boundaries
 		// with certainty, so we ignore them in this mode.
-		//
-		// TODO: Maybe adapter-trimmed reads could be marked as representing
-		// a full fragment? Would require custom adapter trimming software...
+		// TODO: For adapter-trimmed reads we can identify fragment boundaries
+		// TODO: For other single end reads, we could guess that the read
+		// encompasses the entire fragment.
 		if read.is_paired() == false { continue; }
 
-		// If both mates are aligned, we can skip the read pair.
+		// If both mates are aligned, neither one of them can support
+		// a rearrangement, and we can skip the pair.
 		if !read.is_unmapped() && !read.is_mate_unmapped() { continue; }
-
-		// If read is too short to identify fragment boundary, skip it.
-		if read.seq().len() < 10 { continue; }
-
-		// If this read is too short for splitting into anchors, and the
-		// paired mate is aligned, we can skip the read pair.
-		if read.seq().len() < 2 * anchor_len && !read.is_mate_unmapped() {
-			continue;
-		}
 
 		let mut seq = read.seq().as_bytes();
 		if read.is_reverse() { seq = dna::revcomp(&seq); }
@@ -319,12 +325,13 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 		let read_id = read.qname();
 
 		if let Some(mate) = mates.remove(read_id) {
+			if read.seq().len() < 10 || mate.sequence.len() < 10 { continue; }
 			let mut frag_sig = [0u8; 21];
 			for k in 0..10 { frag_sig[k] = seq[k]; }
 			frag_sig[10] = '|' as u8;
 			for k in 0..10 { frag_sig[11 + k] = mate.sequence[k]; }
 
-			if read.is_unmapped() {
+			if read.is_unmapped() && read.seq().len() >= 2 * anchor_len {
 				num_reads_sent += 1;
 				write!(aligner_in, ">5p:{}:\n", num_reads_sent);
 				aligner_in.write_all(&seq[..anchor_len]);
@@ -337,7 +344,7 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 				writeln!(aligner_in);
 			}
 
-			if mate.unaligned == true {
+			if mate.unaligned && mate.sequence.len() >= 2 * anchor_len {
 				num_reads_sent += 1;
 				write!(aligner_in, ">5p:{}:\n", num_reads_sent);
 				aligner_in.write_all(&mate.sequence[..anchor_len]);
@@ -382,7 +389,9 @@ fn dispatch_unaligned_reads_with_frag_id(bam: &bam::Reader, aligner_in: &mut Wri
 fn similar(a: &[u8], b: &[u8], max_mismatches: usize) -> bool {
 	let mut mismatches = 0;
 	for k in 0..a.len() {
-		if a[k] != b[k] { mismatches += 1; }
+		if a[k] != b[k] && a[k] != 'N' as u8 && b[k] != 'N' as u8 {
+			mismatches += 1;
+		}
 	}
 	return mismatches <= max_mismatches
 }
@@ -400,11 +409,11 @@ fn remove_duplicates_based_on_frag_signature(evidence: Vec<&Evidence>) -> Vec<&E
 	let mut filtered: Vec<&Evidence> = Vec::new();
 	let mut redundant_with = vec![-1i32; evidence.len()];
 	for a in 0..evidence.len() {
-		if redundant_with[a] != -1 { continue; }
+		if redundant_with[a] >= 0 { continue; }
 		redundant_with[a] = a as i32;
 		let mut num_redundant = 1;
 		for b in a+1..evidence.len() {
-			if redundant_with[b] != -1 { continue; }
+			if redundant_with[b] >= 0 { continue; }
 			if equal_frag_signature(evidence[a], evidence[b]) {
 			   	redundant_with[b] = a as i32;
 			   	num_redundant += 1;
@@ -419,11 +428,15 @@ fn remove_duplicates_based_on_frag_signature(evidence: Vec<&Evidence>) -> Vec<&E
 		let mut best = 0;
 		let mut best_score = 0;
 		for k in 0..evidence.len() {
-			if redundant_with[k] == a as i32 { continue; }
+			if redundant_with[k] != a as i32 { continue; }
 			let seq = &evidence[k].sequence;
 			let left_len = seq.iter().position(|c| *c == '|' as u8).unwrap();
 			let right_len = seq.len() - left_len - 1;
-			let score = min(left_len, right_len);
+
+			// Score is primarily determined by the length of the shortest
+			// flank, but if the shortest flank is equally long in both reads
+			// then the length of the longest flank is considered also.
+			let score = min(left_len, right_len) * 1000 + max(left_len, right_len);
 			if score > best_score {
 				best = k; best_score = score;
 			}
