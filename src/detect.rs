@@ -17,14 +17,15 @@ use bio::alphabets::dna;
 #[derive(Debug)]
 struct Evidence {
 	chr: String,
-	pos: usize,            // Leftmost position of anchor #1 alignment
+	pos: usize,              // Leftmost position of anchor #1 alignment
 	strand: bool,
 	mchr: String,
-	mpos: usize,           // Leftmost position of anchor #2 alignment
+	mpos: usize,             // Leftmost position of anchor #2 alignment
 	mstrand: bool,
-	sequence: Vec<u8>,     // Full sequence of breakpoint overlapping read
-	signature: Vec<u8>,    // Breakpoint signature (5 bp from both flanks)
-	frag_signature: Vec<u8>
+	sequence: Vec<u8>,       // Full sequence of breakpoint overlapping read
+	signature: Vec<u8>,      // Breakpoint signature (5 bp from both flanks)
+	frag_id: Vec<u8>,        // Fragment (template) ID from BAM file
+	frag_signature: Vec<u8>  // 10 + 10 bp signature identifying fragment
 }
 
 const USAGE: &'static str = "
@@ -33,6 +34,7 @@ Usage:
 
 Options:
   --anchor-len=N       Anchor length for split read analysis [default: 30]
+  --anchor-mm=N        Mismatches allowed in anchor alignments [default: 0]
   --max-frag-len=N     Maximum fragment length [default: 5000]
   --min-evidence=N     Minimum number of supporting DNA fragments [default: 2]
   --remove-duplicates  Remove duplicates based on fragment boundaries
@@ -43,9 +45,10 @@ pub fn main() {
 	let sam_path = args.get_str("<bam_file>").to_string();
 	let genome_path = args.get_str("<genome>");
 	let anchor_len: usize = args.get_str("--anchor-len").parse().unwrap();
+	let anchor_mm: usize = args.get_str("--anchor-mm").parse().unwrap();
 	let max_frag_len: usize = args.get_str("--max-frag-len").parse().unwrap();
 	let min_evidence: usize = args.get_str("--min-evidence").parse().unwrap();
-	let remove_duplicates = args.get_bool("--remove-duplicates");
+	let should_remove_duplicates = args.get_bool("--remove-duplicates");
 
 	let fasta = fasta::Reader::from_file(format!("{}.fa", genome_path))
 		.on_error(&format!("Genome FASTA file {}.fa could not be read.", genome_path));
@@ -71,7 +74,7 @@ pub fn main() {
 		let bam = bam::Reader::from_path(&sam_path)
 			.on_error("Could not open BAM file.");
 
-		if remove_duplicates {
+		if should_remove_duplicates {
 			dispatch_unaligned_reads_with_frag_signature(&bam, &mut bowtie_in, anchor_len);
 		} else {
 			dispatch_unaligned_reads_with_frag_id(&bam, &mut bowtie_in, anchor_len);
@@ -96,7 +99,8 @@ pub fn main() {
         }
 
         let mut anchor_info = line.split(':');
-        let frag_signature = anchor_info.nth(2).unwrap().as_bytes();
+        let frag_id = anchor_info.nth(2).unwrap().as_bytes();
+        let frag_signature = anchor_info.next().unwrap().as_bytes();
         let mut seq: Vec<u8> = anchor_info.next().unwrap().as_bytes().to_vec();
         let full_len: usize = seq.len();
 
@@ -198,6 +202,7 @@ pub fn main() {
 			chr: chr.to_string(), pos: pos, strand: strand,
 			mchr: mchr.to_string(), mpos: mpos, mstrand: mstrand,
 			sequence: junction, signature: signature,
+			frag_id: frag_id.to_vec(),
 			frag_signature: frag_signature.to_vec() });
     }
 
@@ -240,22 +245,16 @@ pub fn main() {
     		reported[s] = true;
     	}
 
-    	/*if read.signature == "CAAAT|CTGTG".as_bytes() {
-    		println!("Evidence for CAAAT|CTGTG:");
+    	/*if read.signature == "CAGAT|ACTTG".as_bytes() {
     		for r in &cluster {
-    			println!("{} ({})", str::from_utf8(&r.sequence).unwrap(),
-    				str::from_utf8(&r.frag_signature).unwrap());
+    			println!("Template ID: {}\nFragment signature: {}\nSequence: {}\n", str::from_utf8(&r.frag_id).unwrap(), str::from_utf8(&r.frag_signature).unwrap(), str::from_utf8(&r.sequence).unwrap());
     		}
     	} else {
     		continue;
     	}*/
 
     	if cluster.len() < min_evidence { continue; }
-    	if remove_duplicates {
-    		cluster = remove_duplicates_based_on_frag_signature(cluster);
-    	} else {
-    		cluster = remove_duplicates_based_on_frag_id(cluster);
-    	}
+    	cluster = remove_duplicates(cluster);
     	if cluster.len() < min_evidence { continue; }
 
     	print!("{}\t{}\t{}\t\t{}\t{}\t{}\t\t",
@@ -278,7 +277,7 @@ struct Mate {
 // anchors in FASTA format to the standard input of Bowtie/BWA.
 // The FASTA header for the anchors are in the following format:
 // 5' anchor: >5p:READ#:
-// 3' anchor: >3p:READ#:FRAG_SIGNATURE:FULL_SEQUENCE:
+// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
 
 fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &mut Write, anchor_len: usize) {
 
@@ -322,9 +321,9 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 		let mut seq = read.seq().as_bytes();
 		if read.is_reverse() { seq = dna::revcomp(&seq); }
 
-		let read_id = read.qname();
+		let frag_id = read.qname();
 
-		if let Some(mate) = mates.remove(read_id) {
+		if let Some(mate) = mates.remove(frag_id) {
 			if read.seq().len() < 10 || mate.sequence.len() < 10 { continue; }
 			let mut frag_sig = [0u8; 21];
 			for k in 0..10 { frag_sig[k] = seq[k]; }
@@ -333,9 +332,15 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 
 			if read.is_unmapped() && read.seq().len() >= 2 * anchor_len {
 				num_reads_sent += 1;
+
+				// 5' anchor: >5p:READ#:
 				write!(aligner_in, ">5p:{}:\n", num_reads_sent);
 				aligner_in.write_all(&seq[..anchor_len]);
+
+				// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
 				write!(aligner_in, "\n>3p:{}:", num_reads_sent);
+				aligner_in.write_all(frag_id);
+				write!(aligner_in, ":");
 				aligner_in.write_all(&frag_sig);
 				write!(aligner_in, ":");
 				aligner_in.write_all(&seq);
@@ -346,9 +351,15 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 
 			if mate.unaligned && mate.sequence.len() >= 2 * anchor_len {
 				num_reads_sent += 1;
+
+				// 5' anchor: >5p:READ#:
 				write!(aligner_in, ">5p:{}:\n", num_reads_sent);
 				aligner_in.write_all(&mate.sequence[..anchor_len]);
+
+				// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
 				write!(aligner_in, "\n>3p:{}:", num_reads_sent);
+				aligner_in.write_all(frag_id);
+				write!(aligner_in, ":");
 				aligner_in.write_all(&frag_sig);
 				write!(aligner_in, ":");
 				aligner_in.write_all(&mate.sequence);
@@ -357,9 +368,9 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 				writeln!(aligner_in);
 			}
 		} else if read.is_unmapped() {
-			mates.insert(read_id.to_vec(), Mate { unaligned: true, sequence: seq });
+			mates.insert(frag_id.to_vec(), Mate { unaligned: true, sequence: seq });
 		} else {
-			mates.insert(read_id.to_vec(), Mate { unaligned: false, sequence: seq });
+			mates.insert(frag_id.to_vec(), Mate { unaligned: false, sequence: seq });
 		}
     }
 }
@@ -370,15 +381,19 @@ fn dispatch_unaligned_reads_with_frag_id(bam: &bam::Reader, aligner_in: &mut Wri
 		let read = r.unwrap();
 		if read.is_unmapped() == false { continue; }
 		if read.seq().len() < anchor_len * 2 { continue; }
-		let read_id = read.qname();
+		let frag_id = read.qname();
 		let seq = read.seq().as_bytes();   // Unaligned can never be reverse
 
 		num_reads_sent += 1;
+
+		// 5' anchor: >5p:READ#:
 		write!(aligner_in, ">5p:{}:\n", num_reads_sent);
 		aligner_in.write_all(&seq[..anchor_len]);
+
+		// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
 		write!(aligner_in, "\n>3p:{}:", num_reads_sent);
-		aligner_in.write_all(read_id);
-		write!(aligner_in, ":");
+		aligner_in.write_all(frag_id);
+		write!(aligner_in, "::");
 		aligner_in.write_all(&seq);
 		write!(aligner_in, ":\n");
 		aligner_in.write_all(&seq[(seq.len() - anchor_len)..]);
@@ -405,7 +420,7 @@ fn equal_frag_signature(a: &Evidence, b: &Evidence) -> bool {
 	return (similar(a1, b1, mm) && similar(a2, b2, mm)) || (similar(a1, b2, mm) && similar(a2, b1, mm))
 }
 
-fn remove_duplicates_based_on_frag_signature(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
+fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 	let mut filtered: Vec<&Evidence> = Vec::new();
 	let mut redundant_with = vec![-1i32; evidence.len()];
 	for a in 0..evidence.len() {
@@ -414,7 +429,16 @@ fn remove_duplicates_based_on_frag_signature(evidence: Vec<&Evidence>) -> Vec<&E
 		let mut num_redundant = 1;
 		for b in a+1..evidence.len() {
 			if redundant_with[b] >= 0 { continue; }
-			if equal_frag_signature(evidence[a], evidence[b]) {
+
+			if evidence[a].frag_id == evidence[b].frag_id {
+				redundant_with[b] = a as i32;
+				num_redundant += 1;
+			}
+			// If the supporting reads have fragment signatures, use them
+			// to identify redundant DNA fragments.
+			else if evidence[a].frag_signature.is_empty() == false &&
+				evidence[b].frag_signature.is_empty() == false && 
+				equal_frag_signature(evidence[a], evidence[b]) {
 			   	redundant_with[b] = a as i32;
 			   	num_redundant += 1;
 			}
@@ -437,43 +461,6 @@ fn remove_duplicates_based_on_frag_signature(evidence: Vec<&Evidence>) -> Vec<&E
 			// flank, but if the shortest flank is equally long in both reads
 			// then the length of the longest flank is considered also.
 			let score = min(left_len, right_len) * 1000 + max(left_len, right_len);
-			if score > best_score {
-				best = k; best_score = score;
-			}
-		}
-		filtered.push(evidence[best]);
-	}
-	filtered
-}
-
-fn remove_duplicates_based_on_frag_id(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
-	let mut filtered: Vec<&Evidence> = Vec::new();
-	let mut redundant_with = vec![-1i32; evidence.len()];
-	for a in 0..evidence.len() {
-		if redundant_with[a] != -1 { continue; }
-		redundant_with[a] = a as i32;
-		let mut num_redundant = 1;
-		for b in a+1..evidence.len() {
-			if redundant_with[b] != -1 { continue; }
-			if evidence[a].frag_signature == evidence[b].frag_signature {
-				redundant_with[b] = a as i32;
-				num_redundant += 1;
-			}
-		}
-
-		if num_redundant == 1 { filtered.push(evidence[a]); continue; }
-
-		// Now we have a list of redundant reads. Since we can only keep
-		// one of these reads as a source of evidence, we pick the "best"
-		// one. Currently this means the one with the longest flanks.
-		let mut best = 0;
-		let mut best_score = 0;
-		for k in 0..evidence.len() {
-			if redundant_with[k] == a as i32 { continue; }
-			let seq = &evidence[k].sequence;
-			let left_len = seq.iter().position(|c| *c == '|' as u8).unwrap();
-			let right_len = seq.len() - left_len - 1;
-			let score = min(left_len, right_len);
 			if score > best_score {
 				best = k; best_score = score;
 			}
