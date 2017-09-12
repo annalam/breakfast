@@ -1,7 +1,14 @@
-Introduction
-------------
+Breakfast
+---------
 
-Breakfast is a toolkit for detecting structural variants from DNA or RNA sequencing data. Breakfast takes PCR/optical duplicates into account when searching for rearrangement supporting reads. Duplicate DNA fragments are identified based on "fragment signatures". When reporting candidate rearrangements, Breakfast shows the full sequence of all supporting reads.
+Breakfast is a software for detecting genomic structural variants from DNA sequencing data. Its features include:
+- Identifies structural variants based on breakpoint-overlapping reads
+- Extremely fast, analyzes XX million reads per second
+- Identifies PCR/optical duplicates and does not count them as independent sources of evidence
+- Can be run on sorted or unsorted BAM files, or can read BAM input from a pipe
+- Uses pre-existing Bowtie indexes to speed up alignment (does not require its own index)
+- Provides tools for filtering out rearrangements that are present in control samples
+
 
 Installation
 ------------
@@ -33,6 +40,7 @@ Detailed overview of the Breakfast algorithm
 
 Unaligned reads are split into two anchors of customizable size: one anchor from the 5' end of the read, and one anchor from the 3' end of the read. These anchors are then aligned against the reference genome. If both anchors align to the reference genome (but the read as a whole did not), the read is considered to support the existence of a genomic rearrangement.
 
+Duplicate DNA fragments are identified based on "fragment signatures". When reporting candidate rearrangements, Breakfast shows the full sequence of all supporting reads.
 
 TODO
 ----
