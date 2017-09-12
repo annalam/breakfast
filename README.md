@@ -19,8 +19,8 @@ The easiest way to install Breakfast is to download one of the pre-built binary 
 
 If a suitable binary package is not available, you can also build Breakfast directly from source code. Note that installing this way requires a Rust compiler and the Cargo build system to be available:
 ```
-git clone https://github.com/mgvel/breakfast.rs.git
-cd breakfast.rs
+git clone https://github.com/annalam/breakfast.git
+cd breakfast
 cargo install --release
 ```
 
