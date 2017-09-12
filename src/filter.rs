@@ -11,7 +11,7 @@ Usage:
 
 Options:
   --min-reads=N     Minimum number of supporting reads [default: 0]
-  --blacklist=PATH  Path to blacklist file
+  --blacklist=PATH  File containing blacklisted breakpoint signatures
 ";
 
 pub fn main() {
@@ -34,38 +34,14 @@ pub fn main() {
 	print!("{}", header);
 
 	for l in sv_file.lines() {
-		let line: String = l.unwrap();
-		let tokens: Vec<&str> = line.split('\t').collect();
-		if tokens.len() < 9 { continue; }
+		let line = l.unwrap();
 
-		let num_reads = tokens[8].split(';').count();
+		let num_reads = line.split('\t').nth(8).unwrap().split(';').count();
 		if num_reads < min_reads { continue; }
 
-        let chrom = tokens[0];
-        let pos: usize = tokens[2].parse().unwrap();
-        let loci_1: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
+		let signature = line.split('\t').nth(9).unwrap();
+		if blacklist.contains(signature) { continue; }
 
-        let chrom = tokens[4];
-        let pos = tokens[6].parse().unwrap();
-        let loci_2: HashSet<_> = sv_locus_identifiers(chrom, pos, 5000).into_iter().collect();
-
-        if loci_1.is_disjoint(&blacklist) || loci_2.is_disjoint(&blacklist) {
-            println!("{}", line);
-        }
+		println!("{}", line);
 	}
-}
-
-
-pub fn sv_locus_identifiers(chr: &str, pos: usize, resolution: i32) -> Vec<String> {
-    let bin: i32 = pos as i32 / resolution;
-	let mut bins: Vec<i32> = Vec::new();
-    for i in bin-1..bin+2 as i32 {
-    	bins.push(i * resolution);
-    }
-
-	let mut out: Vec<String> = Vec::new();
-    for pos in bins {
-    	out.push(format!("{}:{}", &chr, &pos.to_string()));
-    }
-	out
 }

@@ -23,7 +23,7 @@ struct Evidence {
 	mpos: usize,             // Leftmost position of anchor #2 alignment
 	mstrand: bool,
 	sequence: Vec<u8>,       // Full sequence of breakpoint overlapping read
-	signature: Vec<u8>,      // Breakpoint signature (5 bp from both flanks)
+	signature: Vec<u8>,      // Breakpoint signature (8 bp from both flanks)
 	frag_id: Vec<u8>,        // Fragment (template) ID from BAM file
 	frag_signature: Vec<u8>  // 10 + 10 bp signature identifying fragment
 }
@@ -192,11 +192,11 @@ pub fn main() {
 			junction[k+1] = if seq[k] == right_grch[k] { seq[k] } else { seq[k].to_ascii_lowercase() };
 		}
 
-		// Construct a breakpoint signature, composed of 5 bp from both flanks
-		let mut signature = vec![' ' as u8; 11];
-		for k in 0..5 { signature[k] = left_grch[bp - 5 + k]; }
-		signature[5] = '|' as u8;
-		for k in 0..5 { signature[6 + k] = right_grch[bp + k]; }
+		// Construct a breakpoint signature, composed of 8 bp from both flanks
+		let mut signature = vec![' ' as u8; 17];
+		for k in 0..8 { signature[k] = left_grch[bp - 8 + k]; }
+		signature[8] = '|' as u8;
+		for k in 0..8 { signature[9 + k] = right_grch[bp + k]; }
 
 		evidence.push(Evidence {
 			chr: chr.to_string(), pos: pos, strand: strand,
@@ -217,7 +217,7 @@ pub fn main() {
     	else { Ordering::Equal });
 
     eprintln!("Identifying rearrangements based on clusters of discordant reads...");
-    println!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tCHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tSUPPORTING READS\tNOTES");
+    println!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tCHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tSUPPORTING READS\tSIGNATURE\tNOTES");
     let mut reported = vec![false; evidence.len()];
     for p in 0..evidence.len() {
     	// We skip reads that were already incorporated into some cluster.
@@ -264,7 +264,7 @@ pub fn main() {
     		if r > 0 { print!(";"); }
     		print!("{}", str::from_utf8(cluster[r].sequence.as_slice()).unwrap());
     	}
-    	println!();
+    	println!("\t{}\t", str::from_utf8(&read.signature).unwrap());
 	}
 }
 
