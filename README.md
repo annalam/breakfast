@@ -44,10 +44,8 @@ Duplicate DNA fragments are identified based on "fragment signatures". When repo
 
 TODO
 ----
-- [ ] Write "Getting started" documentation for the tool.
 - [ ] Document and test how Breakfast can be run on CRAM files (use samtools view to convert to BAM, then pipe into Breakfast).
 - [ ] Allow '-' to be used as BAM file name, to read from STDIN.
-- [ ] Allow user to customize how many mismatches are allowed in a breakpoint-overlapping read (currently there is no limit).
 - [ ] Change output format so that rearrangement coordinates represent the position of the last base immediately before the breakpoint.
 - [ ] If the user specifies a Bowtie1 index as the reference genome and a FASTA file with the same prefix does not exist, read the chromosome sequences from the Bowtie1 index directly, using bowtie-inspect.
 - [ ] Allow Breakfast to use Bowtie2 or BWA if Bowtie1 is not available.
