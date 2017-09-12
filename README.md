@@ -3,7 +3,7 @@ Breakfast
 
 Breakfast is a software for detecting genomic structural variants from DNA sequencing data. Its features include:
 - Identifies structural variants based on breakpoint-overlapping reads
-- Extremely fast, analyzes ~40 million reads per second per CPU core
+- Extremely fast, analyzes ~40 million reads per minute per CPU core
 - Reports the full sequence of all breakpoint supporting reads, and shows mismatched bases
 - Identifies PCR/optical duplicates and does not count them as independent sources of evidence
 - Can be run on sorted or unsorted BAM files, or can read BAM input from a pipe
