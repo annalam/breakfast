@@ -58,16 +58,12 @@ pub fn main() {
 		let line = l.unwrap();
 		if !line.starts_with("chr") { continue; }
 
-		let mut cols = line.split('\t');
-        let chr_1 = cols.next().unwrap();
-        let strand_1 = cols.next().unwrap();
-        let pos_1: u32 = cols.next().unwrap().parse().unwrap();
-        cols.next();
-        let chr_2 = cols.next().unwrap();
-        let strand_2 = cols.next().unwrap();
-        let pos_2: u32 = cols.next().unwrap().parse().unwrap();
-        cols.next();
-        let reads = cols.next().unwrap();
+		let cols: Vec<&str> = line.split('\t').collect();
+        let chr_1 = cols[0];
+        let pos_1: u32 = cols[2].parse().unwrap();
+        let chr_2 = cols[4];
+        let pos_2: u32 = cols[6].parse().unwrap();
+        let reads = cols[8];
 
         let mut nearby_features_1: Vec<(u32, &Feature)> = Vec::new();
         for feature in &features {
@@ -87,11 +83,17 @@ pub fn main() {
         }
         nearby_features_2.sort_by_key(|x| x.0);
 
-        print!("{}\t{}\t{}\t", chr_1, strand_1, pos_1);
-        for nf in nearby_features_1 { print!("{} ({}), ", nf.1.name, nf.0); }
+        print!("{}\t{}\t{}\t", chr_1, cols[1], pos_1);
+        for (k, nf) in nearby_features_1.iter().enumerate() {
+        	print!("{} ({})", nf.1.name, nf.0);
+        	if k < nearby_features_1.len() - 1 { print!(", "); }
+        }
         print!("\t");
-        print!("{}\t{}\t{}\t", chr_2, strand_2, pos_2);
-        for nf in nearby_features_2 { print!("{} ({}), ", nf.1.name, nf.0); }
-        println!("\t{}", reads);
+        print!("{}\t{}\t{}\t", chr_2, cols[5], pos_2);
+        for (k, nf) in nearby_features_2.iter().enumerate() {
+        	print!("{} ({})", nf.1.name, nf.0);
+        	if k < nearby_features_2.len() - 1 { print!(", "); }
+        }
+        println!("\t{}\t{}\t{}", reads, cols[9], cols[10]);
 	}
 }

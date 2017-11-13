@@ -61,11 +61,11 @@ pub fn main() {
 	}
 
 	// TODO: Handle reads with multiple alignments...
-    eprintln!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
-    let bowtie = Command::new("bowtie")
+	eprintln!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
+	let bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()
-        .on_error("Could not start Bowtie process.");
+		.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()
+		.on_error("Could not start Bowtie process.");
 
 	let mut bowtie_in = BufWriter::new(bowtie.stdin.unwrap());
 	let bowtie_out = BufReader::new(bowtie.stdout.unwrap());
@@ -81,54 +81,51 @@ pub fn main() {
 		}
 	});
 
-    let mut evidence: Vec<Evidence> = Vec::new();
-    let mut prev = String::new();
-    let mut prev_read_num = 0;
+	let mut evidence: Vec<Evidence> = Vec::new();
+	let mut prev = String::new();
+	let mut prev_read_num = 0;
 
-    for l in bowtie_out.lines() {
-        let line = l.unwrap();
+	for l in bowtie_out.lines() {
+		let line = l.unwrap();
 
 		let read_num: usize = line.split(':').nth(1).unwrap().parse().unwrap();
 
-        if line.starts_with("5p:") {
-        	prev = line;
-        	prev_read_num = read_num;
-        	continue;
-        } else if line.starts_with("3p:") && read_num != prev_read_num {
-        	continue;
-        }
+		if line.starts_with("5p:") {
+			prev = line;
+			prev_read_num = read_num;
+			continue;
+		} else if line.starts_with("3p:") && read_num != prev_read_num {
+			continue;
+		}
 
-        let mut anchor_info = line.split(':');
-        let frag_id = anchor_info.nth(2).unwrap().as_bytes();
-        let frag_signature = anchor_info.next().unwrap().as_bytes();
-        let mut seq: Vec<u8> = anchor_info.next().unwrap().as_bytes().to_vec();
-        let full_len: usize = seq.len();
+		let mut anchor_info = line.split(':');
+		let frag_id = anchor_info.nth(2).unwrap().as_bytes();
+		let frag_signature = anchor_info.next().unwrap().as_bytes();
+		let mut seq: Vec<u8> = anchor_info.next().unwrap().as_bytes().to_vec();
+		let full_len: usize = seq.len();
 
-        let mut cols = prev.split('\t');
-        let mut mcols = line.split('\t');
-        cols.next(); mcols.next();   // Skip first column
+		let mut cols = prev.split('\t');
+		let mut mcols = line.split('\t');
+		cols.next(); mcols.next();   // Skip first column
 
-        let mut strand = cols.next().unwrap() == "+";
-        let mut mstrand = mcols.next().unwrap() == "+";
-        let mut chr = cols.next().unwrap();
-        let mut mchr = mcols.next().unwrap();
-        let mut pos: usize = cols.next().unwrap().parse().unwrap();
-        let mut mpos: usize = mcols.next().unwrap().parse().unwrap();
+		let mut strand = cols.next().unwrap() == "+";
+		let mut mstrand = mcols.next().unwrap() == "+";
+		let mut chr = cols.next().unwrap();
+		let mut mchr = mcols.next().unwrap();
+		let mut pos: usize = cols.next().unwrap().parse().unwrap();
+		let mut mpos: usize = mcols.next().unwrap().parse().unwrap();
 
-       	// Do not report rearrangements involving mitochondrial DNA
-	 	//if chr.contains('M') || mchr.contains('M') { continue; }
+		// Reorient the read so that anchor #1 has the lower coordinate.
+		// This simplifies downstream analysis where we cluster the
+		// rearrangement evidence by position.
+		if chr > mchr || (chr == mchr && pos > mpos) {
+			swap(&mut chr, &mut mchr);
+			swap(&mut pos, &mut mpos);
+			let tmp = strand; strand = !mstrand; mstrand = !tmp;
+			seq = dna::revcomp(&seq);
+		}
 
-	 	// Reorient the read so that anchor #1 has the lower coordinate.
-	 	// This simplifies downstream analysis where we cluster the
-	 	// rearrangement evidence by position.
-        if chr > mchr || (chr == mchr && pos > mpos) {
-        	swap(&mut chr, &mut mchr);
-        	swap(&mut pos, &mut mpos);
-        	let tmp = strand; strand = !mstrand; mstrand = !tmp;
-        	seq = dna::revcomp(&seq);
-        }
-
-        // If the read is at the very edge of a chromosome, ignore it.
+		// If the read is at the very edge of a chromosome, ignore it.
 		if pos + full_len >= genome[chr].len() { continue; }
 		if mpos + full_len >= genome[mchr].len() { continue; }
 
@@ -138,25 +135,25 @@ pub fn main() {
 			dna::revcomp(&genome[chr][pos+anchor_len-full_len-1..pos+anchor_len-1].to_vec())
 		};
 
-	 	let right_grch = if mstrand == true {
-	 		genome[mchr][mpos+anchor_len-full_len-1..mpos+anchor_len-1].to_vec()
-	 	} else {
-	 		dna::revcomp(&genome[mchr][mpos-1..mpos+full_len-1].to_vec())
-	 	};
+		let right_grch = if mstrand == true {
+			genome[mchr][mpos+anchor_len-full_len-1..mpos+anchor_len-1].to_vec()
+		} else {
+			dna::revcomp(&genome[mchr][mpos-1..mpos+full_len-1].to_vec())
+		};
 
-	 	// Check that the read sequence is not too homologous on either side
+		// Check that the read sequence is not too homologous on either side
 		// of the breakpoint.
 		/*let mut left_match: f32 = 0.0;
-	  	for k in full_len-anchor_len+1..full_len {
- 			if seq[k] == left_grch[k]{ left_match += 1.0; }
-   		}
-  		left_match = left_match /anchor_len as f32;
+		for k in full_len-anchor_len+1..full_len {
+			if seq[k] == left_grch[k]{ left_match += 1.0; }
+		}
+		left_match = left_match /anchor_len as f32;
 
-  		let mut right_match: f32 = 0.0;
-	  	for k in 1..anchor_len {
- 			if seq[k] == right_grch[k]{ right_match += 1.0; }
-   		}
-  		right_match = right_match/anchor_len as f32;
+		let mut right_match: f32 = 0.0;
+		for k in 1..anchor_len {
+			if seq[k] == right_grch[k]{ right_match += 1.0; }
+		}
+		right_match = right_match/anchor_len as f32;
 		let max_homology = 0.7;
 
 		if left_match >= max_homology || right_match >= max_homology { continue; }*/
@@ -204,67 +201,67 @@ pub fn main() {
 			sequence: junction, signature: signature,
 			frag_id: frag_id.to_vec(),
 			frag_signature: frag_signature.to_vec() });
-    }
+	}
 
-    eprintln!("Found {} rearrangement supporting reads.", evidence.len());
+	eprintln!("Found {} rearrangement supporting reads.", evidence.len());
 
-    eprintln!("Sorting rearrangement supporting reads by position...");
-    evidence.sort_by(|a,b|
-    	if a.chr < b.chr { Ordering::Less }
-    	else if a.chr > b.chr { Ordering::Greater }
-    	else if a.pos < b.pos { Ordering::Less }
-    	else if a.pos > b.pos { Ordering::Greater }
-    	else { Ordering::Equal });
+	eprintln!("Sorting rearrangement supporting reads by position...");
+	evidence.sort_by(|a,b|
+		if a.chr < b.chr { Ordering::Less }
+		else if a.chr > b.chr { Ordering::Greater }
+		else if a.pos < b.pos { Ordering::Less }
+		else if a.pos > b.pos { Ordering::Greater }
+		else { Ordering::Equal });
 
-    eprintln!("Identifying rearrangements based on clusters of discordant reads...");
-    println!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tCHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tSUPPORTING READS\tSIGNATURE\tNOTES");
-    let mut reported = vec![false; evidence.len()];
-    for p in 0..evidence.len() {
-    	// We skip reads that were already incorporated into some cluster.
-    	if reported[p] { continue; }
+	eprintln!("Identifying rearrangements based on clusters of discordant reads...");
+	println!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tCHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\tSUPPORTING READS\tSIGNATURE\tNOTES");
+	let mut reported = vec![false; evidence.len()];
+	for p in 0..evidence.len() {
+		// We skip reads that were already incorporated into some cluster.
+		if reported[p] { continue; }
 
-    	let read = &evidence[p];
-    	let mut cluster: Vec<&Evidence> = vec![read];
-    	for s in p+1..evidence.len() {
-    		// We try to add more reads into the cluster until we encounter
-    		// the first read that is so far that it cannot possibly belong
-    		// to the cluster. Then we terminate since we know that all
-    		// further reads are also too far away (since they are sorted).
-    		if evidence[s].chr != read.chr { break; }
-    		if evidence[s].pos - read.pos > max_frag_len { break; }
+		let read = &evidence[p];
+		let mut cluster: Vec<&Evidence> = vec![read];
+		for s in p+1..evidence.len() {
+			// We try to add more reads into the cluster until we encounter
+			// the first read that is so far that it cannot possibly belong
+			// to the cluster. Then we terminate since we know that all
+			// further reads are also too far away (since they are sorted).
+			if evidence[s].chr != read.chr { break; }
+			if evidence[s].pos - read.pos > max_frag_len { break; }
 
-    		// Before we add a read into the cluster, we check that both
-    		// anchors are consistent with other reads in the cluster.
-    		if evidence[s].mchr != read.mchr { continue; }
-    		if (evidence[s].mpos as i64 - read.mpos as i64).abs() > max_frag_len as i64 { continue; }
-    		if evidence[s].strand != read.strand { continue; }
-    		if evidence[s].mstrand != read.mstrand { continue; }
-    		if evidence[s].signature != read.signature { continue; }
+			// Before we add a read into the cluster, we check that both
+			// anchors are consistent with other reads in the cluster.
+			if evidence[s].mchr != read.mchr { continue; }
+			if (evidence[s].mpos as i64 - read.mpos as i64).abs() > max_frag_len as i64 { continue; }
+			if evidence[s].strand != read.strand { continue; }
+			if evidence[s].mstrand != read.mstrand { continue; }
+			if evidence[s].signature != read.signature { continue; }
 
-    		cluster.push(&evidence[s]);
-    		reported[s] = true;
-    	}
+			cluster.push(&evidence[s]);
+			reported[s] = true;
+		}
 
-    	/*if read.signature == "CAGAT|ACTTG".as_bytes() {
-    		for r in &cluster {
-    			println!("Template ID: {}\nFragment signature: {}\nSequence: {}\n", str::from_utf8(&r.frag_id).unwrap(), str::from_utf8(&r.frag_signature).unwrap(), str::from_utf8(&r.sequence).unwrap());
-    		}
-    	} else {
-    		continue;
-    	}*/
+		/*if read.signature == "CAGAT|ACTTG".as_bytes() {
+			for r in &cluster {
+				println!("Template ID: {}\nFragment signature: {}\nSequence: {}\n", str::from_utf8(&r.frag_id).unwrap(), str::from_utf8(&r.frag_signature).unwrap(), str::from_utf8(&r.sequence).unwrap());
+			}
+		} else {
+			continue;
+		}*/
 
-    	if cluster.len() < min_evidence { continue; }
-    	cluster = remove_duplicates(cluster);
-    	if cluster.len() < min_evidence { continue; }
+		if cluster.len() < min_evidence { continue; }
+		cluster = remove_duplicates(cluster);
+		if cluster.len() < min_evidence { continue; }
 
-    	print!("{}\t{}\t{}\t\t{}\t{}\t{}\t\t",
-    		read.chr, if read.strand { '+' } else { '-' }, read.pos,
-    		read.mchr, if read.mstrand { '+' } else { '-' }, read.mpos);
-    	for r in 0..cluster.len() {
-    		if r > 0 { print!(";"); }
-    		print!("{}", str::from_utf8(cluster[r].sequence.as_slice()).unwrap());
-    	}
-    	println!("\t{}\t", str::from_utf8(&read.signature).unwrap());
+		print!("{}\t{}\t{}\t\t{}\t{}\t{}\t\t",
+			read.chr, if read.strand { '+' } else { '-' }, read.pos,
+			read.mchr, if read.mstrand { '+' } else { '-' }, read.mpos);
+		for r in 0..cluster.len() {
+			if r > 0 { print!(";"); }
+			print!("{}", str::from_utf8(cluster[r].sequence.as_slice()).unwrap());
+		}
+		println!("\t{}\t", str::from_utf8(&read.signature).unwrap());
 	}
 }
 
@@ -321,9 +318,14 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 		let mut seq = read.seq().as_bytes();
 		if read.is_reverse() { seq = dna::revcomp(&seq); }
 
-		let frag_id = read.qname();
+		// Any ':' characters in the fragment ID must be removed here
+		// since ':' is used as a delimiter in our anchor descriptors.
+		let mut frag_id = read.qname().to_vec();
+		for k in 0..frag_id.len() {
+			if frag_id[k] == b':' { frag_id[k] = b'_'; }
+		}
 
-		if let Some(mate) = mates.remove(frag_id) {
+		if let Some(mate) = mates.remove(&frag_id) {
 			if read.seq().len() < 10 || mate.sequence.len() < 10 { continue; }
 			let mut frag_sig = [0u8; 21];
 			for k in 0..10 { frag_sig[k] = seq[k]; }
@@ -339,7 +341,7 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 
 				// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
 				write!(aligner_in, "\n>3p:{}:", num_reads_sent);
-				aligner_in.write_all(frag_id);
+				aligner_in.write_all(&frag_id);
 				write!(aligner_in, ":");
 				aligner_in.write_all(&frag_sig);
 				write!(aligner_in, ":");
@@ -358,7 +360,7 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 
 				// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
 				write!(aligner_in, "\n>3p:{}:", num_reads_sent);
-				aligner_in.write_all(frag_id);
+				aligner_in.write_all(&frag_id);
 				write!(aligner_in, ":");
 				aligner_in.write_all(&frag_sig);
 				write!(aligner_in, ":");
@@ -372,7 +374,7 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 		} else {
 			mates.insert(frag_id.to_vec(), Mate { unaligned: false, sequence: seq });
 		}
-    }
+	}
 }
 
 fn dispatch_unaligned_reads_with_frag_id(bam: &bam::Reader, aligner_in: &mut Write, anchor_len: usize) {
@@ -381,7 +383,14 @@ fn dispatch_unaligned_reads_with_frag_id(bam: &bam::Reader, aligner_in: &mut Wri
 		let read = r.unwrap();
 		if read.is_unmapped() == false { continue; }
 		if read.seq().len() < anchor_len * 2 { continue; }
-		let frag_id = read.qname();
+
+		// Any ':' characters in the fragment ID must be removed here
+		// since ':' is used as a delimiter in our anchor descriptors.
+		let mut frag_id = read.qname().to_vec();
+		for k in 0..frag_id.len() {
+			if frag_id[k] == b':' { frag_id[k] = b'_'; }
+		}
+		
 		let seq = read.seq().as_bytes();   // Unaligned can never be reverse
 
 		num_reads_sent += 1;
@@ -392,7 +401,7 @@ fn dispatch_unaligned_reads_with_frag_id(bam: &bam::Reader, aligner_in: &mut Wri
 
 		// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
 		write!(aligner_in, "\n>3p:{}:", num_reads_sent);
-		aligner_in.write_all(frag_id);
+		aligner_in.write_all(&frag_id);
 		write!(aligner_in, "::");
 		aligner_in.write_all(&seq);
 		write!(aligner_in, ":\n");
@@ -404,20 +413,31 @@ fn dispatch_unaligned_reads_with_frag_id(bam: &bam::Reader, aligner_in: &mut Wri
 fn similar(a: &[u8], b: &[u8], max_mismatches: usize) -> bool {
 	let mut mismatches = 0;
 	for k in 0..a.len() {
-		if a[k] != b[k] && a[k] != 'N' as u8 && b[k] != 'N' as u8 {
+		if a[k] != b[k] && a[k] != b'N' && b[k] != b'N' {
 			mismatches += 1;
 		}
 	}
 	return mismatches <= max_mismatches
 }
 
-fn equal_frag_signature(a: &Evidence, b: &Evidence) -> bool {
+/*
+fn both_sides_match_frag_signature(a: &Evidence, b: &Evidence) -> bool {
 	let a1 = &a.frag_signature[..10];
 	let a2 = &a.frag_signature[11..];
 	let b1 = &b.frag_signature[..10];
 	let b2 = &b.frag_signature[11..];
 	let mm = 1;   // Max mismatches
 	return (similar(a1, b1, mm) && similar(a2, b2, mm)) || (similar(a1, b2, mm) && similar(a2, b1, mm))
+}
+*/
+
+fn one_side_match_frag_signature(a: &Evidence, b: &Evidence) -> bool {
+	let a1 = &a.frag_signature[..10];
+	let a2 = &a.frag_signature[11..];
+	let b1 = &b.frag_signature[..10];
+	let b2 = &b.frag_signature[11..];
+	let mm = 1;   // Max mismatches
+	return similar(a1, b1, mm) || similar(a1, b2, mm) || similar(a2, b1, mm) || similar(a2, b2, mm)
 }
 
 fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
@@ -438,9 +458,9 @@ fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 			// to identify redundant DNA fragments.
 			else if evidence[a].frag_signature.is_empty() == false &&
 				evidence[b].frag_signature.is_empty() == false && 
-				equal_frag_signature(evidence[a], evidence[b]) {
-			   	redundant_with[b] = a as i32;
-			   	num_redundant += 1;
+				one_side_match_frag_signature(evidence[a], evidence[b]) {
+				redundant_with[b] = a as i32;
+				num_redundant += 1;
 			}
 		}
 
