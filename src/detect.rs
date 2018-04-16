@@ -6,7 +6,6 @@ use std::thread;
 use std::str;
 use std::process::{Command, Stdio};
 use std::collections::HashMap;
-use std::ascii::AsciiExt;
 use std::cmp::{min, max, Ordering};
 use std::io::{BufReader, BufWriter, BufRead, Write};
 use rust_htslib::bam;
@@ -28,7 +27,7 @@ struct Evidence {
 	frag_signature: Vec<u8>  // 10 + 10 bp signature identifying fragment
 }
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Usage:
   breakfast detect [options] <bam_file> <genome>
 
@@ -45,7 +44,7 @@ pub fn main() {
 	let sam_path = args.get_str("<bam_file>").to_string();
 	let genome_path = args.get_str("<genome>");
 	let anchor_len: usize = args.get_str("--anchor-len").parse().unwrap();
-	let anchor_mm: usize = args.get_str("--anchor-mm").parse().unwrap();
+	//let anchor_mm: usize = args.get_str("--anchor-mm").parse().unwrap();
 	let max_frag_len: usize = args.get_str("--max-frag-len").parse().unwrap();
 	let min_evidence: usize = args.get_str("--min-evidence").parse().unwrap();
 	let should_remove_duplicates = args.get_bool("--remove-duplicates");
@@ -71,13 +70,13 @@ pub fn main() {
 	let bowtie_out = BufReader::new(bowtie.stdout.unwrap());
 
 	thread::spawn(move || {
-		let bam = bam::Reader::from_path(&sam_path)
+		let mut bam = bam::Reader::from_path(&sam_path)
 			.on_error("Could not open BAM file.");
 
 		if should_remove_duplicates {
-			dispatch_unaligned_reads_with_frag_signature(&bam, &mut bowtie_in, anchor_len);
+			dispatch_unaligned_reads_with_frag_signature(&mut bam, &mut bowtie_in, anchor_len);
 		} else {
-			dispatch_unaligned_reads_with_frag_id(&bam, &mut bowtie_in, anchor_len);
+			dispatch_unaligned_reads_with_frag_id(&mut bam, &mut bowtie_in, anchor_len);
 		}
 	});
 
@@ -141,23 +140,6 @@ pub fn main() {
 			dna::revcomp(&genome[mchr][mpos-1..mpos+full_len-1].to_vec())
 		};
 
-		// Check that the read sequence is not too homologous on either side
-		// of the breakpoint.
-		/*let mut left_match: f32 = 0.0;
-		for k in full_len-anchor_len+1..full_len {
-			if seq[k] == left_grch[k]{ left_match += 1.0; }
-		}
-		left_match = left_match /anchor_len as f32;
-
-		let mut right_match: f32 = 0.0;
-		for k in 1..anchor_len {
-			if seq[k] == right_grch[k]{ right_match += 1.0; }
-		}
-		right_match = right_match/anchor_len as f32;
-		let max_homology = 0.7;
-
-		if left_match >= max_homology || right_match >= max_homology { continue; }*/
-
 		// Identify the breakpoint location that minimizes the number of
 		// nucleotide mismatches between the read and the breakpoint flanks.
 		let mut mismatches: Vec<usize> = vec![0; full_len];
@@ -195,9 +177,22 @@ pub fn main() {
 		signature[8] = '|' as u8;
 		for k in 0..8 { signature[9 + k] = right_grch[bp + k]; }
 
+		// Calculate the position of the first nucleotide immediately before
+		// the breakpoint, on both sides of the junction.
+		let left_bp_pos = if strand == true {
+			pos + bp - 1
+		} else {
+			pos + anchor_len - bp
+		};
+		let right_bp_pos = if strand == true {
+			pos + anchor_len - (full_len - bp)
+		} else {
+			pos + (full_len - bp)
+		};
+
 		evidence.push(Evidence {
-			chr: chr.to_string(), pos: pos, strand: strand,
-			mchr: mchr.to_string(), mpos: mpos, mstrand: mstrand,
+			chr: chr.to_string(), pos: left_bp_pos, strand: strand,
+			mchr: mchr.to_string(), mpos: right_bp_pos, mstrand: mstrand,
 			sequence: junction, signature: signature,
 			frag_id: frag_id.to_vec(),
 			frag_signature: frag_signature.to_vec() });
@@ -276,7 +271,7 @@ struct Mate {
 // 5' anchor: >5p:READ#:
 // 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
 
-fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &mut Write, anchor_len: usize) {
+fn dispatch_unaligned_reads_with_frag_signature(bam: &mut bam::Reader, aligner_in: &mut Write, anchor_len: usize) {
 
 	// We do not want to count PCR duplicates of the same DNA fragment as
 	// independent sources of evidence for a rearrangement. To prevent that,
@@ -377,7 +372,7 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &bam::Reader, aligner_in: &
 	}
 }
 
-fn dispatch_unaligned_reads_with_frag_id(bam: &bam::Reader, aligner_in: &mut Write, anchor_len: usize) {
+fn dispatch_unaligned_reads_with_frag_id(bam: &mut bam::Reader, aligner_in: &mut Write, anchor_len: usize) {
 	let mut num_reads_sent = 0;
 	for r in bam.records() {
 		let read = r.unwrap();

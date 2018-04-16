@@ -2,7 +2,7 @@
 name = "breakfast"
 version = "0.1.0"
 authors = ["Matti Annala <matti.annala@uta.fi>", "Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
-description = "Breakfast is a software for detecting structural variants from DNA sequencing data"
+description = "BreakFast is a toolkit for detecting chromosomal rearrangements based on high throughput sequencing data"
 readme = "README.md"
 keywords = ["bioinformatics", "rearrangement", "structural variant", "sequencing"]
 license = "MIT"
@@ -12,4 +12,4 @@ repository = "https://github.com/annalam/breakfast.git"
 docopt = "*"
 bio = "*"
 regex = "*"
-rust-htslib = "*"
+rust-htslib = "0.15.0"

@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader};
 use std::collections::HashSet;
 use std::fs::File;
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Usage:
   breakfast filter [options] <sv_path>
 

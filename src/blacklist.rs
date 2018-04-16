@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::collections::HashMap;
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Usage:
   breakfast blacklist [options] <sv_files>...
 

@@ -3,7 +3,7 @@ use parse_args;
 use std::io::{BufRead, BufReader, stdin};
 use std::fs::File;
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Usage:
   breakfast annotate [options] <sv_path> <bed_path>
 ";

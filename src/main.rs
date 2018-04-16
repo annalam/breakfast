@@ -10,7 +10,7 @@ use docopt::{Docopt, ArgvMap};
 
 mod detect; mod filter; mod annotate; mod blacklist;
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Breakfast is a software for detecting chromosomal rearrangements in DNA/RNA
 sequencing data.
 
