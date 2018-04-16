@@ -30,7 +30,7 @@ pub fn main() {
 	let mut sv_file = BufReader::new(File::open(&sv_path)
 		.on_error("Could not open .sv file."));
 	let mut header = String::new();
-	sv_file.read_line(&mut header);
+	sv_file.read_line(&mut header).unwrap();
 	print!("{}", header);
 
 	for l in sv_file.lines() {

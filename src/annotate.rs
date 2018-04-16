@@ -38,7 +38,7 @@ pub fn main() {
     }
 
 	let mut header = String::new();
-	sv.read_line(&mut header);
+	sv.read_line(&mut header).unwrap();
 	print!("{}", header);
 
     let bed = BufReader::new(File::open(&bed_path).unwrap());

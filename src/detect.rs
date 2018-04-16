@@ -8,6 +8,7 @@ use std::process::{Command, Stdio};
 use std::collections::HashMap;
 use std::cmp::{min, max, Ordering};
 use std::io::{BufReader, BufWriter, BufRead, Write};
+use std::ascii::AsciiExt;
 use rust_htslib::bam;
 use rust_htslib::bam::Read as HTSRead;
 use bio::io::fasta;
@@ -331,38 +332,38 @@ fn dispatch_unaligned_reads_with_frag_signature(bam: &mut bam::Reader, aligner_i
 				num_reads_sent += 1;
 
 				// 5' anchor: >5p:READ#:
-				write!(aligner_in, ">5p:{}:\n", num_reads_sent);
-				aligner_in.write_all(&seq[..anchor_len]);
+				write!(aligner_in, ">5p:{}:\n", num_reads_sent).unwrap();
+				aligner_in.write_all(&seq[..anchor_len]).unwrap();
 
 				// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
-				write!(aligner_in, "\n>3p:{}:", num_reads_sent);
-				aligner_in.write_all(&frag_id);
-				write!(aligner_in, ":");
-				aligner_in.write_all(&frag_sig);
-				write!(aligner_in, ":");
-				aligner_in.write_all(&seq);
-				write!(aligner_in, ":\n");
-				aligner_in.write_all(&seq[(seq.len() - anchor_len)..]);
-				writeln!(aligner_in);
+				write!(aligner_in, "\n>3p:{}:", num_reads_sent).unwrap();
+				aligner_in.write_all(&frag_id).unwrap();
+				write!(aligner_in, ":").unwrap();
+				aligner_in.write_all(&frag_sig).unwrap();
+				write!(aligner_in, ":").unwrap();
+				aligner_in.write_all(&seq).unwrap();
+				write!(aligner_in, ":\n").unwrap();
+				aligner_in.write_all(&seq[(seq.len() - anchor_len)..]).unwrap();
+				writeln!(aligner_in).unwrap();
 			}
 
 			if mate.unaligned && mate.sequence.len() >= 2 * anchor_len {
 				num_reads_sent += 1;
 
 				// 5' anchor: >5p:READ#:
-				write!(aligner_in, ">5p:{}:\n", num_reads_sent);
-				aligner_in.write_all(&mate.sequence[..anchor_len]);
+				write!(aligner_in, ">5p:{}:\n", num_reads_sent).unwrap();
+				aligner_in.write_all(&mate.sequence[..anchor_len]).unwrap();
 
 				// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
-				write!(aligner_in, "\n>3p:{}:", num_reads_sent);
-				aligner_in.write_all(&frag_id);
-				write!(aligner_in, ":");
-				aligner_in.write_all(&frag_sig);
-				write!(aligner_in, ":");
-				aligner_in.write_all(&mate.sequence);
-				write!(aligner_in, ":\n");
-				aligner_in.write_all(&mate.sequence[(mate.sequence.len() - anchor_len)..]);
-				writeln!(aligner_in);
+				write!(aligner_in, "\n>3p:{}:", num_reads_sent).unwrap();
+				aligner_in.write_all(&frag_id).unwrap();
+				write!(aligner_in, ":").unwrap();
+				aligner_in.write_all(&frag_sig).unwrap();
+				write!(aligner_in, ":").unwrap();
+				aligner_in.write_all(&mate.sequence).unwrap();
+				write!(aligner_in, ":\n").unwrap();
+				aligner_in.write_all(&mate.sequence[(mate.sequence.len() - anchor_len)..]).unwrap();
+				writeln!(aligner_in).unwrap();
 			}
 		} else if read.is_unmapped() {
 			mates.insert(frag_id.to_vec(), Mate { unaligned: true, sequence: seq });
@@ -385,23 +386,23 @@ fn dispatch_unaligned_reads_with_frag_id(bam: &mut bam::Reader, aligner_in: &mut
 		for k in 0..frag_id.len() {
 			if frag_id[k] == b':' { frag_id[k] = b'_'; }
 		}
-		
+
 		let seq = read.seq().as_bytes();   // Unaligned can never be reverse
 
 		num_reads_sent += 1;
 
 		// 5' anchor: >5p:READ#:
-		write!(aligner_in, ">5p:{}:\n", num_reads_sent);
-		aligner_in.write_all(&seq[..anchor_len]);
+		write!(aligner_in, ">5p:{}:\n", num_reads_sent).unwrap();
+		aligner_in.write_all(&seq[..anchor_len]).unwrap();
 
 		// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
-		write!(aligner_in, "\n>3p:{}:", num_reads_sent);
-		aligner_in.write_all(&frag_id);
-		write!(aligner_in, "::");
-		aligner_in.write_all(&seq);
-		write!(aligner_in, ":\n");
-		aligner_in.write_all(&seq[(seq.len() - anchor_len)..]);
-		writeln!(aligner_in);
+		write!(aligner_in, "\n>3p:{}:", num_reads_sent).unwrap();
+		aligner_in.write_all(&frag_id).unwrap();
+		write!(aligner_in, "::").unwrap();
+		aligner_in.write_all(&seq).unwrap();
+		write!(aligner_in, ":\n").unwrap();
+		aligner_in.write_all(&seq[(seq.len() - anchor_len)..]).unwrap();
+		writeln!(aligner_in).unwrap();
 	}
 }
 
@@ -452,7 +453,7 @@ fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 			// If the supporting reads have fragment signatures, use them
 			// to identify redundant DNA fragments.
 			else if evidence[a].frag_signature.is_empty() == false &&
-				evidence[b].frag_signature.is_empty() == false && 
+				evidence[b].frag_signature.is_empty() == false &&
 				one_side_match_frag_signature(evidence[a], evidence[b]) {
 				redundant_with[b] = a as i32;
 				num_redundant += 1;

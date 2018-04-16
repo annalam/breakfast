@@ -25,7 +25,7 @@ pub fn main() {
     for (s, sv_path) in sv_paths.iter().enumerate() {
         let mut sv_file = BufReader::new(File::open(&sv_path).unwrap());
         let mut header = String::new();
-        sv_file.read_line(&mut header);   // Skip the header
+        sv_file.read_line(&mut header).unwrap();   // Skip the header
         for l in sv_file.lines() {
             let line = l.unwrap();
             let signature = line.split('\t').nth(9).unwrap().to_string();
