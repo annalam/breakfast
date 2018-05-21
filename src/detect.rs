@@ -185,10 +185,10 @@ pub fn main() {
 		} else {
 			pos + anchor_len - bp
 		};
-		let right_bp_pos = if strand == true {
-			pos + anchor_len - (full_len - bp)
+		let right_bp_pos = if mstrand == true {
+			mpos + anchor_len - (full_len - bp)
 		} else {
-			pos + (full_len - bp)
+			mpos + (full_len - bp)
 		};
 
 		evidence.push(Evidence {
