@@ -21,7 +21,7 @@ If a suitable binary package is not available, you can also build Breakfast dire
 ```
 git clone https://github.com/annalam/breakfast.git
 cd breakfast
-cargo install --release
+cargo install
 ```
 
 
