@@ -14,14 +14,9 @@ Breakfast is a software for detecting genomic structural variants from DNA seque
 Installation
 ------------
 
-The easiest way to install Breakfast is to download one of the pre-built binary packages:
-- Breakfast 0.1 (x86-64 Linux)
-
-If a suitable binary package is not available, you can also build Breakfast directly from source code. Note that installing this way requires a Rust compiler and the Cargo build system to be available:
+Install Rust (version 1.31 or later). Then run the following command:
 ```
-git clone https://github.com/annalam/breakfast.git
-cd breakfast
-cargo install
+cargo install --git https://github.com/annalam/breakfast
 ```
 
 
