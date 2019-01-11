@@ -1,6 +1,5 @@
 
-use parse_args;
-use ErrorHelper;
+use common::parse_args;
 use std::mem::swap;
 use std::thread;
 use std::str;
@@ -8,9 +7,8 @@ use std::process::{Command, Stdio};
 use std::collections::HashMap;
 use std::cmp::{min, max, Ordering};
 use std::io::{BufReader, BufWriter, BufRead, Write};
-use std::ascii::AsciiExt;
 use rust_htslib::bam;
-use rust_htslib::bam::Read as HTSRead;
+use rust_htslib::bam::Read;
 use bio::io::fasta;
 use bio::alphabets::dna;
 
@@ -51,7 +49,7 @@ pub fn main() {
 	let should_remove_duplicates = args.get_bool("--remove-duplicates");
 
 	let fasta = fasta::Reader::from_file(format!("{}.fa", genome_path))
-		.on_error(&format!("Genome FASTA file {}.fa could not be read.", genome_path));
+		.unwrap_or_else(|_| error!("Genome FASTA file {}.fa could not be read.", genome_path));
 	eprintln!("Reading reference genome into memory...");
 
 	let mut genome = HashMap::new();
@@ -64,15 +62,15 @@ pub fn main() {
 	eprintln!("Splitting unaligned reads into {} bp anchors and aligning against the genome...", anchor_len);
 	let bowtie = Command::new("bowtie")
 		.args(&["-f", "-p1", "-v0", "-m1", "-B1", "--suppress", "5,6,7,8", &genome_path, "-"])
-		.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()
-		.on_error("Could not start Bowtie process.");
+		.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap_or_else(
+		|_| error!("Could not start Bowtie process."));
 
 	let mut bowtie_in = BufWriter::new(bowtie.stdin.unwrap());
 	let bowtie_out = BufReader::new(bowtie.stdout.unwrap());
 
 	thread::spawn(move || {
-		let mut bam = bam::Reader::from_path(&sam_path)
-			.on_error("Could not open BAM file.");
+		let mut bam = bam::Reader::from_path(&sam_path).unwrap_or_else(
+			|_| error!("Could not open BAM file."));
 
 		if should_remove_duplicates {
 			dispatch_unaligned_reads_with_frag_signature(&mut bam, &mut bowtie_in, anchor_len);

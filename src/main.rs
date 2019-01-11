@@ -3,12 +3,12 @@ extern crate docopt;
 extern crate bio;
 extern crate rust_htslib;
 extern crate regex;
+extern crate bitvec;
 
 use std::env;
-use std::process::exit;
-use docopt::{Docopt, ArgvMap};
 
-mod detect; mod filter; mod annotate; mod blacklist;
+#[macro_use] mod common;
+mod detect; mod filter; mod annotate; mod blacklist; mod matrix;
 
 const USAGE: &str = "
 Breakfast is a software for detecting chromosomal rearrangements in DNA/RNA
@@ -21,6 +21,8 @@ Available subcommands:
   detect      Detect chromosomal rearrangements.
   filter      Filter rearrangements based on quality of evidence.
   blacklist   Construct a rearrangement blacklist based on various criteria.
+  annotate    Annotate genes adjacent to rearrangement breakpoints.
+  matrix      Build a read count matrix for rearrangements.
 ";
 
 fn main() {
@@ -32,33 +34,7 @@ fn main() {
     else if args.len() >= 2 && args[1] == "filter" { filter::main(); }
 	else if args.len() >= 2 && args[1] == "annotate" { annotate::main(); }
 	else if args.len() >= 2 && args[1] == "blacklist" { blacklist::main(); }
-	else { println!("{}", USAGE); exit(-1); }
-}
-
-pub fn parse_args(usage: &str) -> ArgvMap {
-	Docopt::new(usage).unwrap().parse().
-		on_error(&format!("Invalid arguments.\n{}", usage))
-}
-
-// Helper methods for error reporting
-trait ErrorHelper<T> {
-	fn on_error(self, msg: &str) -> T;
-}
-
-impl<T> ErrorHelper<T> for Option<T> {
-	fn on_error(self, msg: &str) -> T {
-		match self {
-			Some(x) => x,
-			None => { eprintln!("ERROR: {}\n", msg); exit(-1) }
-		}
-	}
-}
-
-impl<T, E> ErrorHelper<T> for Result<T, E> {
-	fn on_error(self, msg: &str) -> T {
-		match self {
-			Ok(x) => x,
-			Err(_) => { eprintln!("ERROR: {}\n", msg); exit(-1) }
-		}
-	}
+	else if args.len() >= 2 && args[1] == "matrix" { matrix::main(); }
+	else if args.len() == 1 { eprintln!("{}", USAGE); }
+	else { error!("Invalid subcommand.\n\n{}", USAGE); }
 }
