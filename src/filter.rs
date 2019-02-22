@@ -22,7 +22,9 @@ pub fn main() {
 	let mut blacklist = HashSet::new();
 	if !blacklist_path.is_empty() {
 		let mut bl = FileReader::new(&blacklist_path);
-		while bl.read_line(&mut line) { blacklist.insert(line.clone()); }
+		while bl.read_line(&mut line) {
+			blacklist.insert(line.trim().to_string());
+		}
 	}
 
 	let mut sv_file = FileReader::new(&sv_path);
