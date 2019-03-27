@@ -3,6 +3,8 @@ use docopt::{Docopt, ArgvMap};
 use std::process::{Command, Stdio};
 use std::io::{stdin, BufRead, BufReader};
 use std::fs::File;
+use rust_htslib::bam;
+use rust_htslib::bam::{Read, ReadError};
 
 macro_rules! error {
 	($($arg:tt)+) => ({
@@ -46,5 +48,16 @@ impl FileReader {
 			Ok(len) => len > 0,
 			_ => { error!("I/O error while reading from file."); }
 		}
+	}
+}
+
+// Function for reading BAM records, with proper user-friendly messages.
+// Returns false after reading the last record, or if reading fails.
+pub fn read_bam_record(bam: &mut bam::Reader, record: &mut bam::Record) -> bool {
+	match bam.read(record) {
+		Err(ReadError::NoMoreRecord) => false,
+		Err(ReadError::Truncated) => error!("BAM file ended prematurely."),
+		Err(ReadError::Invalid) => error!("Invalid BAM record."),
+		Ok(_) => true
 	}
 }

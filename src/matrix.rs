@@ -1,8 +1,8 @@
 
-use common::{parse_args, FileReader};
+use common::{parse_args, FileReader, read_bam_record};
 use bitvec::*;
 use rust_htslib::bam;
-use rust_htslib::bam::Read;
+use rust_htslib::bam::{Read, Record, ReadError};
 use bio::alphabets::dna;
 
 const USAGE: &str = "
@@ -10,7 +10,8 @@ Usage:
   breakfast matrix [options] <sv_file> <bam_files>...
 
 Options:
-  --all-reads   Count all reads, not just unaligned ones.
+  --count-duplicates  Include duplicate reads in counts
+  --count-aligned     Include aligned reads in counts
 ";
 
 // Each signature is 20+20 bp, covering both sides of the breakpoint,
@@ -91,6 +92,8 @@ pub fn main() {
 	let args = parse_args(USAGE);
 	let sv_path = args.get_str("<sv_file>");
 	let bam_paths = args.get_vec("<bam_files>");
+	let count_duplicates = args.get_bool("--count-duplicates");
+	let count_aligned = args.get_bool("--count-aligned");
 
 	// Convert BAM paths to sample names
 	let mut samples: Vec<String> = Vec::new();
@@ -145,7 +148,9 @@ pub fn main() {
 			evidence: vec![0; bam_paths.len()]
 		});
 	}
-	eprintln!("WARNING: Skipped {} rearrangements with signatures containing ambiguous nucleotides.", skipped_ambiguous);
+	if skipped_ambiguous > 0 {
+		eprintln!("WARNING: Skipped {} rearrangements with signatures containing ambiguous nucleotides.", skipped_ambiguous);
+	}
 
 	rearrangements.sort_unstable_by(|a, b| a.signature.cmp(&b.signature));
 	for k in 1..rearrangements.len() {
@@ -186,9 +191,11 @@ pub fn main() {
 			|_| error!("Could not open BAM file."));
 
 		// TODO: Make faster by reusing the same BAM record.
-		for r in bam.records() {
-			let read = r.unwrap();
-			if read.is_unmapped() == false { continue; }
+		let mut read = Record::new();
+		while read_bam_record(&mut bam, &mut read) {
+			if !count_aligned && read.is_unmapped() == false { continue; }
+			if !count_duplicates && read.is_duplicate() { continue; }
+
 			let seq = String::from_utf8(read.seq().as_bytes()).unwrap();
 
 			// Start with some error bits set, so we only start checking
@@ -206,16 +213,11 @@ pub fn main() {
 					if seq.contains(&rearrangement.signature) ||
 						seq.contains(&rearrangement.signature_revcomp) {
 						rearrangement.evidence[s] += 1;
-						//eprintln!("Read {} supports rearrangement with signature {}.", seq, rearrangement.signature);
+						break 'outer;
 					}
-					break 'outer;
 				}
 			}
 		}
-
-		//let mut supporting_reads = 0;
-		//for r in &rearrangements { supporting_reads += r.evidence[s]; }
-		//eprintln!("Found {} supporting reads for rearrangements.", supporting_reads);
 	}
 
 	print!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\t");
@@ -225,7 +227,7 @@ pub fn main() {
 	println!();
 	for r in rearrangements {
 		print!("{}", r.first_8_cols);
-		print!("\t\t{}|{}\t", &r.signature[0..20], &r.signature[21..]);
+		print!("\t\t{}|{}\t", &r.signature[0..20], &r.signature[20..]);
 		for s in 0..samples.len() { print!("\t{}", r.evidence[s]); }
 		println!();
 	}
