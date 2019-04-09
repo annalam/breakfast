@@ -150,8 +150,8 @@ pub fn main() {
 	let sv_path = args.get_str("<sv_file>");
 	let bam_paths = args.get_vec("<bam_files>");
 	let threads: usize = args.get_str("--threads").parse().unwrap();
-	let count_duplicates = args.get_bool("--count-duplicates");
-	let count_aligned = args.get_bool("--count-aligned");
+	//let count_duplicates = args.get_bool("--count-duplicates");
+	//let count_aligned = args.get_bool("--count-aligned");
 
 	// Convert BAM paths to sample names
 	let mut samples: Vec<String> = Vec::new();
@@ -197,8 +197,7 @@ pub fn main() {
 			cols[6], cols[7]);
 
 		rearrangements.push(Rearrangement {
-			signature, signature_revcomp, first_8_cols, 
-			evidence: vec![0; bam_paths.len()]
+			signature, signature_revcomp, first_8_cols
 		});
 	}
 	if skipped_ambiguous > 0 {
