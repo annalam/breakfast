@@ -1,5 +1,5 @@
 
-use common::parse_args;
+use crate::common::parse_args;
 use std::io::{BufRead, BufReader, stdin};
 use std::fs::File;
 

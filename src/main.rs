@@ -1,10 +1,4 @@
 
-extern crate docopt;
-extern crate bio;
-extern crate rust_htslib;
-extern crate regex;
-extern crate bitvec;
-
 use std::env;
 
 #[macro_use] mod common;

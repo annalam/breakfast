@@ -1,8 +1,7 @@
 
-use common::parse_args;
+use crate::common::parse_args;
 use std::mem::swap;
-use std::thread;
-use std::str;
+use std::{str, thread};
 use std::process::{Command, Stdio};
 use std::collections::HashMap;
 use std::cmp::{min, max, Ordering};

@@ -1,6 +1,7 @@
 [package]
 name = "breakfast"
 version = "0.1.0"
+edition = "2018"
 authors = ["Matti Annala <matti.annala@uta.fi>", "Gnanavel Mutharasu <gnanavel.mutharasu@gmail.com>"]
 description = "Breakfast is a toolkit for detecting chromosomal rearrangements based on high throughput sequencing data"
 readme = "README.md"
@@ -14,3 +15,4 @@ bio = "0.21"
 regex = "1"
 rust-htslib = "0.15"
 bitvec = "0.9"
+rayon = "1"

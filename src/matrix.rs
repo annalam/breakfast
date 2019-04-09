@@ -1,17 +1,17 @@
 
-use common::{parse_args, FileReader, read_bam_record};
+use crate::common::{parse_args, FileReader, read_bam_record};
 use bitvec::*;
 use rust_htslib::bam;
-use rust_htslib::bam::{Read, Record, ReadError};
+use rust_htslib::bam::Record;
 use bio::alphabets::dna;
+use rayon::prelude::*;
 
 const USAGE: &str = "
 Usage:
   breakfast matrix [options] <sv_file> <bam_files>...
 
 Options:
-  --count-duplicates  Include duplicate reads in counts
-  --count-aligned     Include aligned reads in counts
+  --threads=N         Maximum number of threads to use [default: 1]
 ";
 
 // Each signature is 20+20 bp, covering both sides of the breakpoint,
@@ -27,7 +27,7 @@ struct Rearrangement {
 	//chromosome_right: String,
 	//position_right: usize,
 	//strand_right: char,
-	evidence: Vec<usize>
+	//evidence: Vec<u32>
 }
 
 fn reverse_complement(seq: &str) -> String {
@@ -88,10 +88,68 @@ fn most_frequent(elems: &Vec<String>) -> String {
 	sorted[most_frequent].clone()
 }
 
+fn count_rearrangements(bam_path: &str, rearrangements: &Vec<Rearrangement>)
+	-> Vec<u32> {
+
+	eprintln!("Analyzing {}...", bam_path);
+
+	// Arrange junction signatures into a 65536-element table that is indexed
+	// with the first 8 bp of the junction signature. This allows extremely
+	// fast lookups.
+	let mut signature_exists = bitvec![0; 65536];
+	let mut signature_map: Vec<Vec<u32>> =
+		(0..65536).map(|_| Vec::new()).collect();
+	for r in 0..rearrangements.len() {
+		// Add the signatures for the two strands into the signature map.
+		let hash = hash_8bp_sequence(&rearrangements[r].signature[16..24]);
+		signature_exists.set(hash as usize, true);
+		signature_map[hash as usize].push(r as u32);
+
+		let hash = hash_8bp_sequence(
+			&rearrangements[r].signature_revcomp[16..24]);
+		signature_exists.set(hash as usize, true);
+		signature_map[hash as usize].push(r as u32);
+	}
+
+	let mut supporting_reads = vec![0; rearrangements.len()];
+
+	let mut bam = bam::Reader::from_path(&bam_path).unwrap_or_else(
+		|_| error!("Could not open BAM file."));
+	let mut read = Record::new();
+	while read_bam_record(&mut bam, &mut read) {
+		//if !count_aligned && read.is_unmapped() == false { continue; }
+		//if !count_duplicates && read.is_duplicate() { continue; }
+
+		let seq = String::from_utf8(read.seq().as_bytes()).unwrap();
+
+		// Start with some error bits set, so we only start checking
+		// against the signature map once we have hashed at least eight
+		// nucleotides.
+		let mut hash = 0b00000000_00000011_00000000_00000000u32;
+		'outer: for base in seq.bytes() {
+			hash = hash_nucleotide(hash, base);
+			if hash & 0xFFFF0000u32 > 0 { continue; }
+			if signature_exists[hash as usize] == false { continue; }
+			for ridx in &signature_map[hash as usize] {
+				// This read contains the 4+4 bp junction signature.
+				// Now check if the 20+20 bp junction is also found.
+				let rearrangement = &rearrangements[*ridx as usize];
+				if seq.contains(&rearrangement.signature) ||
+					seq.contains(&rearrangement.signature_revcomp) {
+					supporting_reads[*ridx as usize] += 1;
+					break 'outer;
+				}
+			}
+		}
+	}
+	return supporting_reads
+}
+
 pub fn main() {
 	let args = parse_args(USAGE);
 	let sv_path = args.get_str("<sv_file>");
 	let bam_paths = args.get_vec("<bam_files>");
+	let threads: usize = args.get_str("--threads").parse().unwrap();
 	let count_duplicates = args.get_bool("--count-duplicates");
 	let count_aligned = args.get_bool("--count-aligned");
 
@@ -128,6 +186,7 @@ pub fn main() {
 		signature.make_ascii_uppercase();
 		if signature.chars().any(
 			|b| b != 'A' && b != 'C' && b != 'G' && b != 'T') {
+			eprintln!("WARNING: Skipping the following rearrangement because its consensus signature contains ambiguous nucleotides:\n{}", line);
 			skipped_ambiguous += 1;
 			continue;
 		}
@@ -139,12 +198,6 @@ pub fn main() {
 
 		rearrangements.push(Rearrangement {
 			signature, signature_revcomp, first_8_cols, 
-			//chromosome_left: cols[0].into(),
-			//strand_left: parse_strand(cols[1]),
-			//position_left: cols[2].parse().unwrap(),
-			//chromosome_right: cols[4].into(),
-			//strand_right: parse_strand(cols[5]),
-			//position_right: cols[6].parse().unwrap(),
 			evidence: vec![0; bam_paths.len()]
 		});
 	}
@@ -157,7 +210,7 @@ pub fn main() {
 		if rearrangements[k - 1].signature == rearrangements[k].signature &&
 			rearrangements[k - 1].first_8_cols !=
 			rearrangements[k].first_8_cols {
-			eprintln!("WARNING: Found two rearrangements with signature {}:\n{}\n{}\n",
+			eprintln!("WARNING: Found two distinct rearrangements with same signature {}:\n{}\n{}\n",
 				rearrangements[k].signature,
 				rearrangements[k - 1].first_8_cols,
 				rearrangements[k].first_8_cols);
@@ -165,70 +218,23 @@ pub fn main() {
 	}
 	rearrangements.dedup_by(|a, b| a.signature == b.signature);
 
-	// Arrange junction signatures into a 65536-element table that is indexed
-	// with the first 8 bp of the junction signature. This allows extremely
-	// fast lookups.
-	eprintln!("Building signature map for {} rearrangements...",
-		rearrangements.len());
-	let mut signature_exists = bitvec![0; 65536];
-	let mut signature_map: Vec<Vec<u32>> =
-		(0..65536).map(|_| Vec::new()).collect();
-	for r in 0..rearrangements.len() {
-		// Add the signatures for the two strands into the signature map.
-		let hash = hash_8bp_sequence(&rearrangements[r].signature[16..24]);
-		signature_exists.set(hash as usize, true);
-		signature_map[hash as usize].push(r as u32);
+	eprintln!("Identifying supporting reads for {} rearrangements in {} BAM files...", rearrangements.len(), bam_paths.len());
 
-		let hash = hash_8bp_sequence(
-			&rearrangements[r].signature_revcomp[16..24]);
-		signature_exists.set(hash as usize, true);
-		signature_map[hash as usize].push(r as u32);
-	}
-
-	for s in 0..bam_paths.len() {
-		eprintln!("Analyzing {}...", samples[s]);
-		let mut bam = bam::Reader::from_path(&bam_paths[s]).unwrap_or_else(
-			|_| error!("Could not open BAM file."));
-
-		// TODO: Make faster by reusing the same BAM record.
-		let mut read = Record::new();
-		while read_bam_record(&mut bam, &mut read) {
-			if !count_aligned && read.is_unmapped() == false { continue; }
-			if !count_duplicates && read.is_duplicate() { continue; }
-
-			let seq = String::from_utf8(read.seq().as_bytes()).unwrap();
-
-			// Start with some error bits set, so we only start checking
-			// against the signature map once we have hashed at least eight
-			// nucleotides.
-			let mut hash = 0b00000000_00000011_00000000_00000000u32;
-			'outer: for base in seq.bytes() {
-				hash = hash_nucleotide(hash, base);
-				if hash & 0xFFFF0000u32 > 0 { continue; }
-				if signature_exists[hash as usize] == false { continue; }
-				for ridx in &signature_map[hash as usize] {
-					// This read contains the 4+4 bp junction signature.
-					// Now check if the 20+20 bp junction is also found.
-					let rearrangement = &mut rearrangements[*ridx as usize];
-					if seq.contains(&rearrangement.signature) ||
-						seq.contains(&rearrangement.signature_revcomp) {
-						rearrangement.evidence[s] += 1;
-						break 'outer;
-					}
-				}
-			}
-		}
-	}
+	rayon::ThreadPoolBuilder::new().num_threads(threads).build_global()
+		.unwrap();
+	let evidence: Vec<Vec<u32>> = bam_paths.par_iter()
+		.map(|bam_path| count_rearrangements(&bam_path, &rearrangements))
+		.collect();
 
 	print!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\t");
 	print!("CHROM\tSTRAND\tPOSITION\tNEARBY FEATURES\t");
 	print!("SUPPORTING READS\tSIGNATURE\tNOTES");
 	for sample in &samples { print!("\t{}", sample); }
 	println!();
-	for r in rearrangements {
-		print!("{}", r.first_8_cols);
-		print!("\t\t{}|{}\t", &r.signature[0..20], &r.signature[20..]);
-		for s in 0..samples.len() { print!("\t{}", r.evidence[s]); }
+	for r in 0..rearrangements.len() {
+		print!("{}", rearrangements[r].first_8_cols);
+		print!("\t\t{}|{}\t", &rearrangements[r].signature[0..20], &rearrangements[r].signature[20..]);
+		for e in &evidence { print!("\t{}", e[r]); }
 		println!();
 	}
 }
