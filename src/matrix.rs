@@ -117,6 +117,8 @@ fn count_rearrangements(bam_path: &str, rearrangements: &Vec<Rearrangement>)
 		|_| error!("Could not open BAM file."));
 	let mut read = Record::new();
 	while read_bam_record(&mut bam, &mut read) {
+		if read.is_unmapped() == false { continue; }
+		if read.is_duplicate() { continue; }
 		//if !count_aligned && read.is_unmapped() == false { continue; }
 		//if !count_duplicates && read.is_duplicate() { continue; }
 
