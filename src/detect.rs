@@ -21,8 +21,8 @@ struct Evidence {
 	mstrand: bool,
 	sequence: Vec<u8>,        // Full sequence of breakpoint overlapping read
 	signature: Vec<u8>,       // Breakpoint signature (8 bp from both flanks)
-	ref_signature_1: Vec<u8>, // Normal sequence around the 1st breakpoint
-	ref_signature_2: Vec<u8>, // Normal sequence around the 2nd breakpoint
+	//ref_signature_1: Vec<u8>, // Normal sequence around the 1st breakpoint
+	//ref_signature_2: Vec<u8>, // Normal sequence around the 2nd breakpoint
 	frag_id: Vec<u8>          // Fragment QNAME from BAM file
 }
 
