@@ -14,15 +14,16 @@ use bio::alphabets::dna;
 #[derive(Debug)]
 struct Evidence {
 	chr: String,
-	pos: usize,              // Leftmost position of anchor #1 alignment
+	pos: usize,               // Leftmost position of anchor #1 alignment
 	strand: bool,
 	mchr: String,
-	mpos: usize,             // Leftmost position of anchor #2 alignment
+	mpos: usize,              // Leftmost position of anchor #2 alignment
 	mstrand: bool,
-	sequence: Vec<u8>,       // Full sequence of breakpoint overlapping read
-	signature: Vec<u8>,      // Breakpoint signature (8 bp from both flanks)
-	frag_id: Vec<u8>,        // Fragment (template) ID from BAM file
-	frag_signature: Vec<u8>  // 10 + 10 bp signature identifying fragment
+	sequence: Vec<u8>,        // Full sequence of breakpoint overlapping read
+	signature: Vec<u8>,       // Breakpoint signature (8 bp from both flanks)
+	ref_signature_1: Vec<u8>, // Normal sequence around the 1st breakpoint
+	ref_signature_2: Vec<u8>, // Normal sequence around the 2nd breakpoint
+	frag_id: Vec<u8>          // Fragment QNAME from BAM file
 }
 
 const USAGE: &str = "
@@ -34,7 +35,7 @@ Options:
   --anchor-mm=N        Mismatches allowed in anchor alignments [default: 0]
   --max-frag-len=N     Maximum fragment length [default: 5000]
   --min-evidence=N     Minimum number of supporting DNA fragments [default: 2]
-  --remove-duplicates  Remove duplicates based on fragment boundaries
+  --count-duplicates   Count also reads that have been flagged as duplicates
 ";
 
 pub fn main() {
@@ -45,7 +46,7 @@ pub fn main() {
 	//let anchor_mm: usize = args.get_str("--anchor-mm").parse().unwrap();
 	let max_frag_len: usize = args.get_str("--max-frag-len").parse().unwrap();
 	let min_evidence: usize = args.get_str("--min-evidence").parse().unwrap();
-	let should_remove_duplicates = args.get_bool("--remove-duplicates");
+	let count_duplicates = args.get_bool("--count-duplicates");
 
 	let fasta = fasta::Reader::from_file(format!("{}.fa", genome_path))
 		.unwrap_or_else(|_| error!("Genome FASTA file {}.fa could not be read.", genome_path));
@@ -71,10 +72,37 @@ pub fn main() {
 		let mut bam = bam::Reader::from_path(&sam_path).unwrap_or_else(
 			|_| error!("Could not open BAM file."));
 
-		if should_remove_duplicates {
-			dispatch_unaligned_reads_with_frag_signature(&mut bam, &mut bowtie_in, anchor_len);
-		} else {
-			dispatch_unaligned_reads_with_frag_id(&mut bam, &mut bowtie_in, anchor_len);
+		let mut num_reads_sent = 0;
+		for r in bam.records() {
+			let read = r.unwrap();
+			if read.is_unmapped() == false { continue; }
+			if read.is_duplicate() && count_duplicates == false { continue; }
+			if read.seq().len() < anchor_len * 2 { continue; }
+
+			// Any ':' characters in the fragment ID must be removed here
+			// since ':' is used as a delimiter in our anchor descriptors.
+			let mut frag_id = read.qname().to_vec();
+			for k in 0..frag_id.len() {
+				if frag_id[k] == b':' { frag_id[k] = b'_'; }
+			}
+
+			// Unaligned reads never need to be reverse-complemented
+			let seq = read.seq().as_bytes();
+
+			num_reads_sent += 1;
+
+			// 5' anchor: >5p:READ#
+			write!(bowtie_in, ">5p:{}\n", num_reads_sent).unwrap();
+			bowtie_in.write_all(&seq[..anchor_len]).unwrap();
+
+			// 3' anchor: >3p:READ#:FRAG_ID:FULL_SEQUENCE
+			write!(bowtie_in, "\n>3p:{}:", num_reads_sent).unwrap();
+			bowtie_in.write_all(&frag_id).unwrap();
+			write!(bowtie_in, ":").unwrap();
+			bowtie_in.write_all(&seq).unwrap();
+			write!(bowtie_in, "\n").unwrap();
+			bowtie_in.write_all(&seq[(seq.len() - anchor_len)..]).unwrap();
+			writeln!(bowtie_in).unwrap();
 		}
 	});
 
@@ -97,7 +125,6 @@ pub fn main() {
 
 		let mut anchor_info = line.split(':');
 		let frag_id = anchor_info.nth(2).unwrap().as_bytes();
-		let frag_signature = anchor_info.next().unwrap().as_bytes();
 		let mut seq: Vec<u8> = anchor_info.next().unwrap().as_bytes().to_vec();
 		let full_len: usize = seq.len();
 
@@ -175,6 +202,9 @@ pub fn main() {
 		signature[8] = '|' as u8;
 		for k in 0..8 { signature[9 + k] = right_grch[bp + k]; }
 
+		// Construct a reference signature for the first breakpoint.
+		// TODO: Implement
+
 		// Calculate the position of the first nucleotide immediately before
 		// the breakpoint, on both sides of the junction.
 		let left_bp_pos = if strand == true {
@@ -192,8 +222,7 @@ pub fn main() {
 			chr: chr.to_string(), pos: left_bp_pos, strand: strand,
 			mchr: mchr.to_string(), mpos: right_bp_pos, mstrand: mstrand,
 			sequence: junction, signature: signature,
-			frag_id: frag_id.to_vec(),
-			frag_signature: frag_signature.to_vec() });
+			frag_id: frag_id.to_vec() });
 	}
 
 	eprintln!("Found {} rearrangement supporting reads.", evidence.len());
@@ -258,181 +287,6 @@ pub fn main() {
 	}
 }
 
-struct Mate {
-	unaligned: bool,
-	sequence: Vec<u8>
-}
-
-// These functions split unaligned reads into anchors, and send those
-// anchors in FASTA format to the standard input of Bowtie/BWA.
-// The FASTA header for the anchors are in the following format:
-// 5' anchor: >5p:READ#:
-// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
-
-fn dispatch_unaligned_reads_with_frag_signature(bam: &mut bam::Reader, aligner_in: &mut Write, anchor_len: usize) {
-
-	// We do not want to count PCR duplicates of the same DNA fragment as
-	// independent sources of evidence for a rearrangement. To prevent that,
-	// we mark each read with a "fragment signature" that identifies the
-	// DNA fragment from which it originated. In the absence of unique
-	// molecular identifiers (UMI), DNA fragments can only be identified
-	// based on their boundaries. Two distinct DNA fragments from the original
-	// biological sample are unlikely to have their boundaries at the exact
-	// same chromosomal coordinates. In rearrangement analysis, the evidence
-	// for rearrangements often comes in the form of unaligned reads.
-	// This means that we cannot identify DNA fragments based on their aligned
-	// position. Instead, we identify DNA fragments based on the DNA sequences
-	// found at their 5' and 3' ends. In Breakfast, we extract 10 bp sequences
-	// from both ends of the DNA fragment, and use them as the
-	// "fragment signature".
-
-	// To associate each unaligned read with a "fragment signature", we must
-	// have access to both mates of the paired read. In a position-sorted BAM
-	// file, the mates are often not adjacent in the file. We must
-	// therefore keep track of a read's sequence until we encounter its mate.
-	let mut mates: HashMap<Vec<u8>, Mate> = HashMap::new();
-
-	let mut num_reads_sent = 0;
-
-	for r in bam.records() {
-		let read = r.unwrap();
-
-		// For single end reads, we cannot identify fragment boundaries
-		// with certainty, so we ignore them in this mode.
-		// TODO: For adapter-trimmed reads we can identify fragment boundaries
-		// TODO: For other single end reads, we could guess that the read
-		// encompasses the entire fragment.
-		if read.is_paired() == false { continue; }
-
-		// If both mates are aligned, neither one of them can support
-		// a rearrangement, and we can skip the pair.
-		if !read.is_unmapped() && !read.is_mate_unmapped() { continue; }
-
-		let mut seq = read.seq().as_bytes();
-		if read.is_reverse() { seq = dna::revcomp(&seq); }
-
-		// Any ':' characters in the fragment ID must be removed here
-		// since ':' is used as a delimiter in our anchor descriptors.
-		let mut frag_id = read.qname().to_vec();
-		for k in 0..frag_id.len() {
-			if frag_id[k] == b':' { frag_id[k] = b'_'; }
-		}
-
-		if let Some(mate) = mates.remove(&frag_id) {
-			if read.seq().len() < 10 || mate.sequence.len() < 10 { continue; }
-			let mut frag_sig = [0u8; 21];
-			for k in 0..10 { frag_sig[k] = seq[k]; }
-			frag_sig[10] = '|' as u8;
-			for k in 0..10 { frag_sig[11 + k] = mate.sequence[k]; }
-
-			if read.is_unmapped() && read.seq().len() >= 2 * anchor_len {
-				num_reads_sent += 1;
-
-				// 5' anchor: >5p:READ#:
-				write!(aligner_in, ">5p:{}:\n", num_reads_sent).unwrap();
-				aligner_in.write_all(&seq[..anchor_len]).unwrap();
-
-				// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
-				write!(aligner_in, "\n>3p:{}:", num_reads_sent).unwrap();
-				aligner_in.write_all(&frag_id).unwrap();
-				write!(aligner_in, ":").unwrap();
-				aligner_in.write_all(&frag_sig).unwrap();
-				write!(aligner_in, ":").unwrap();
-				aligner_in.write_all(&seq).unwrap();
-				write!(aligner_in, ":\n").unwrap();
-				aligner_in.write_all(&seq[(seq.len() - anchor_len)..]).unwrap();
-				writeln!(aligner_in).unwrap();
-			}
-
-			if mate.unaligned && mate.sequence.len() >= 2 * anchor_len {
-				num_reads_sent += 1;
-
-				// 5' anchor: >5p:READ#:
-				write!(aligner_in, ">5p:{}:\n", num_reads_sent).unwrap();
-				aligner_in.write_all(&mate.sequence[..anchor_len]).unwrap();
-
-				// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
-				write!(aligner_in, "\n>3p:{}:", num_reads_sent).unwrap();
-				aligner_in.write_all(&frag_id).unwrap();
-				write!(aligner_in, ":").unwrap();
-				aligner_in.write_all(&frag_sig).unwrap();
-				write!(aligner_in, ":").unwrap();
-				aligner_in.write_all(&mate.sequence).unwrap();
-				write!(aligner_in, ":\n").unwrap();
-				aligner_in.write_all(&mate.sequence[(mate.sequence.len() - anchor_len)..]).unwrap();
-				writeln!(aligner_in).unwrap();
-			}
-		} else if read.is_unmapped() {
-			mates.insert(frag_id.to_vec(), Mate { unaligned: true, sequence: seq });
-		} else {
-			mates.insert(frag_id.to_vec(), Mate { unaligned: false, sequence: seq });
-		}
-	}
-}
-
-fn dispatch_unaligned_reads_with_frag_id(bam: &mut bam::Reader, aligner_in: &mut Write, anchor_len: usize) {
-	let mut num_reads_sent = 0;
-	for r in bam.records() {
-		let read = r.unwrap();
-		if read.is_unmapped() == false { continue; }
-		if read.seq().len() < anchor_len * 2 { continue; }
-
-		// Any ':' characters in the fragment ID must be removed here
-		// since ':' is used as a delimiter in our anchor descriptors.
-		let mut frag_id = read.qname().to_vec();
-		for k in 0..frag_id.len() {
-			if frag_id[k] == b':' { frag_id[k] = b'_'; }
-		}
-
-		let seq = read.seq().as_bytes();   // Unaligned can never be reverse
-
-		num_reads_sent += 1;
-
-		// 5' anchor: >5p:READ#:
-		write!(aligner_in, ">5p:{}:\n", num_reads_sent).unwrap();
-		aligner_in.write_all(&seq[..anchor_len]).unwrap();
-
-		// 3' anchor: >3p:READ#:FRAG_ID:FRAG_SIGNATURE:FULL_SEQUENCE:
-		write!(aligner_in, "\n>3p:{}:", num_reads_sent).unwrap();
-		aligner_in.write_all(&frag_id).unwrap();
-		write!(aligner_in, "::").unwrap();
-		aligner_in.write_all(&seq).unwrap();
-		write!(aligner_in, ":\n").unwrap();
-		aligner_in.write_all(&seq[(seq.len() - anchor_len)..]).unwrap();
-		writeln!(aligner_in).unwrap();
-	}
-}
-
-fn similar(a: &[u8], b: &[u8], max_mismatches: usize) -> bool {
-	let mut mismatches = 0;
-	for k in 0..a.len() {
-		if a[k] != b[k] && a[k] != b'N' && b[k] != b'N' {
-			mismatches += 1;
-		}
-	}
-	return mismatches <= max_mismatches
-}
-
-/*
-fn both_sides_match_frag_signature(a: &Evidence, b: &Evidence) -> bool {
-	let a1 = &a.frag_signature[..10];
-	let a2 = &a.frag_signature[11..];
-	let b1 = &b.frag_signature[..10];
-	let b2 = &b.frag_signature[11..];
-	let mm = 1;   // Max mismatches
-	return (similar(a1, b1, mm) && similar(a2, b2, mm)) || (similar(a1, b2, mm) && similar(a2, b1, mm))
-}
-*/
-
-fn one_side_match_frag_signature(a: &Evidence, b: &Evidence) -> bool {
-	let a1 = &a.frag_signature[..10];
-	let a2 = &a.frag_signature[11..];
-	let b1 = &b.frag_signature[..10];
-	let b2 = &b.frag_signature[11..];
-	let mm = 1;   // Max mismatches
-	return similar(a1, b1, mm) || similar(a1, b2, mm) || similar(a2, b1, mm) || similar(a2, b2, mm)
-}
-
 fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 	let mut filtered: Vec<&Evidence> = Vec::new();
 	let mut redundant_with = vec![-1i32; evidence.len()];
@@ -444,14 +298,6 @@ fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 			if redundant_with[b] >= 0 { continue; }
 
 			if evidence[a].frag_id == evidence[b].frag_id {
-				redundant_with[b] = a as i32;
-				num_redundant += 1;
-			}
-			// If the supporting reads have fragment signatures, use them
-			// to identify redundant DNA fragments.
-			else if evidence[a].frag_signature.is_empty() == false &&
-				evidence[b].frag_signature.is_empty() == false &&
-				one_side_match_frag_signature(evidence[a], evidence[b]) {
 				redundant_with[b] = a as i32;
 				num_redundant += 1;
 			}
