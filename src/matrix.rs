@@ -100,7 +100,7 @@ fn count_rearrangements(bam_path: &str, rearrangements: &Vec<Rearrangement>)
 	let mut signature_map: Vec<Vec<u32>> =
 		(0..65536).map(|_| Vec::new()).collect();
 	for r in 0..rearrangements.len() {
-		// Add the signatures for the two strands into the signature map.
+		// Add the signature and its reverse complement to the signature map.
 		let hash = hash_8bp_sequence(&rearrangements[r].signature[16..24]);
 		signature_exists.set(hash as usize, true);
 		signature_map[hash as usize].push(r as u32);

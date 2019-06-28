@@ -92,7 +92,7 @@ pub fn main() {
 			num_reads_sent += 1;
 
 			// 5' anchor: >5p:READ#
-			write!(bowtie_in, ">5p:{}\n", num_reads_sent).unwrap();
+			write!(bowtie_in, ">5p:{}:\n", num_reads_sent).unwrap();
 			bowtie_in.write_all(&seq[..anchor_len]).unwrap();
 
 			// 3' anchor: >3p:READ#:FRAG_ID:FULL_SEQUENCE
@@ -113,7 +113,8 @@ pub fn main() {
 	for l in bowtie_out.lines() {
 		let line = l.unwrap();
 
-		let read_num: usize = line.split(':').nth(1).unwrap().parse().unwrap();
+		let read_num: usize = line.split(':').nth(1).unwrap().parse()
+			.unwrap_or_else(|_| error!("Parse error, line is:\n{}", line));
 
 		if line.starts_with("5p:") {
 			prev = line;
