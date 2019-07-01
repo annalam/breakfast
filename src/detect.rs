@@ -69,41 +69,7 @@ pub fn main() {
 	let bowtie_out = BufReader::new(bowtie.stdout.unwrap());
 
 	thread::spawn(move || {
-		let mut bam = bam::Reader::from_path(&sam_path).unwrap_or_else(
-			|_| error!("Could not open BAM file."));
-
-		let mut num_reads_sent = 0;
-		for r in bam.records() {
-			let read = r.unwrap();
-			if read.is_unmapped() == false { continue; }
-			if read.is_duplicate() && count_duplicates == false { continue; }
-			if read.seq().len() < anchor_len * 2 { continue; }
-
-			// Any ':' characters in the fragment ID must be removed here
-			// since ':' is used as a delimiter in our anchor descriptors.
-			let mut frag_id = read.qname().to_vec();
-			for k in 0..frag_id.len() {
-				if frag_id[k] == b':' { frag_id[k] = b'_'; }
-			}
-
-			// Unaligned reads never need to be reverse-complemented
-			let seq = read.seq().as_bytes();
-
-			num_reads_sent += 1;
-
-			// 5' anchor: >5p:READ#
-			write!(bowtie_in, ">5p:{}:\n", num_reads_sent).unwrap();
-			bowtie_in.write_all(&seq[..anchor_len]).unwrap();
-
-			// 3' anchor: >3p:READ#:FRAG_ID:FULL_SEQUENCE
-			write!(bowtie_in, "\n>3p:{}:", num_reads_sent).unwrap();
-			bowtie_in.write_all(&frag_id).unwrap();
-			write!(bowtie_in, ":").unwrap();
-			bowtie_in.write_all(&seq).unwrap();
-			write!(bowtie_in, "\n").unwrap();
-			bowtie_in.write_all(&seq[(seq.len() - anchor_len)..]).unwrap();
-			writeln!(bowtie_in).unwrap();
-		}
+		dispatch_reads_to_bowtie(&sam_path, &mut bowtie_in, anchor_len, count_duplicates);
 	});
 
 	let mut evidence: Vec<Evidence> = Vec::new();
@@ -113,8 +79,7 @@ pub fn main() {
 	for l in bowtie_out.lines() {
 		let line = l.unwrap();
 
-		let read_num: usize = line.split(':').nth(1).unwrap().parse()
-			.unwrap_or_else(|_| error!("Parse error, line is:\n{}", line));
+		let read_num: usize = line.split(':').nth(1).unwrap().parse().unwrap();
 
 		if line.starts_with("5p:") {
 			prev = line;
@@ -320,7 +285,7 @@ fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 			// Score is primarily determined by the length of the shortest
 			// flank, but if the shortest flank is equally long in both reads
 			// then the length of the longest flank is considered also.
-			let score = min(left_len, right_len) * 1000 + max(left_len, right_len);
+			let score = min(left_len, right_len) * 10000 + max(left_len, right_len);
 			if score > best_score {
 				best = k; best_score = score;
 			}
@@ -330,4 +295,48 @@ fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 	filtered
 }
 
+
+fn dispatch_reads_to_bowtie(sam_path: &str, bowtie_in: &mut impl Write, anchor_len: usize, count_duplicates: bool) {
+
+	let mut bam = if sam_path == "-" {
+		bam::Reader::from_stdin().unwrap_or_else(
+			|_| error!("Failed to read BAM file from standard input."))
+	} else {
+		bam::Reader::from_path(&sam_path).unwrap_or_else(
+			|_| error!("Could not open BAM file '{}'", sam_path))
+	};
+
+	let mut num_reads_sent = 0;
+	for r in bam.records() {
+		let read = r.unwrap();
+		if read.is_unmapped() == false { continue; }
+		if read.is_duplicate() && count_duplicates == false { continue; }
+		if read.seq().len() < anchor_len * 2 { continue; }
+
+		// Any ':' characters in the fragment ID must be removed here
+		// since ':' is used as a delimiter in our anchor descriptors.
+		let mut frag_id = read.qname().to_vec();
+		for k in 0..frag_id.len() {
+			if frag_id[k] == b':' { frag_id[k] = b'_'; }
+		}
+
+		// Unaligned reads never need to be reverse-complemented
+		let seq = read.seq().as_bytes();
+
+		num_reads_sent += 1;
+
+		// 5' anchor: >5p:READ#:
+		write!(bowtie_in, ">5p:{}:\n", num_reads_sent).unwrap();
+		bowtie_in.write_all(&seq[..anchor_len]).unwrap();
+
+		// 3' anchor: >3p:READ#:FRAG_ID:FULL_SEQUENCE:
+		write!(bowtie_in, "\n>3p:{}:", num_reads_sent).unwrap();
+		bowtie_in.write_all(&frag_id).unwrap();
+		write!(bowtie_in, ":").unwrap();
+		bowtie_in.write_all(&seq).unwrap();
+		write!(bowtie_in, ":\n").unwrap();
+		bowtie_in.write_all(&seq[(seq.len() - anchor_len)..]).unwrap();
+		writeln!(bowtie_in).unwrap();
+	}
+}
 
