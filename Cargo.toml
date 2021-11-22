@@ -11,8 +11,7 @@ repository = "https://github.com/annalam/breakfast.git"
 
 [dependencies]
 docopt = "1"
-bio = "0.21"
+bio = "0.39"
 regex = "1"
-rust-htslib = "0.15"
-bitvec = "0.9"
+rust-htslib = "0.38"
 rayon = "1"

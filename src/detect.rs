@@ -35,7 +35,6 @@ Options:
   --anchor-mm=N        Mismatches allowed in anchor alignments [default: 0]
   --max-frag-len=N     Maximum fragment length [default: 5000]
   --min-evidence=N     Minimum number of supporting DNA fragments [default: 2]
-  --count-duplicates   Count also reads that have been flagged as duplicates
 ";
 
 pub fn main() {
@@ -46,7 +45,6 @@ pub fn main() {
 	//let anchor_mm: usize = args.get_str("--anchor-mm").parse().unwrap();
 	let max_frag_len: usize = args.get_str("--max-frag-len").parse().unwrap();
 	let min_evidence: usize = args.get_str("--min-evidence").parse().unwrap();
-	let count_duplicates = args.get_bool("--count-duplicates");
 
 	let fasta = fasta::Reader::from_file(format!("{}.fa", genome_path))
 		.unwrap_or_else(|_| error!("Genome FASTA file {}.fa could not be read.", genome_path));
@@ -69,7 +67,7 @@ pub fn main() {
 	let bowtie_out = BufReader::new(bowtie.stdout.unwrap());
 
 	thread::spawn(move || {
-		dispatch_reads_to_bowtie(&sam_path, &mut bowtie_in, anchor_len, count_duplicates);
+		dispatch_reads_to_bowtie(&sam_path, &mut bowtie_in, anchor_len);
 	});
 
 	let mut evidence: Vec<Evidence> = Vec::new();
@@ -296,7 +294,7 @@ fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 }
 
 
-fn dispatch_reads_to_bowtie(sam_path: &str, bowtie_in: &mut impl Write, anchor_len: usize, count_duplicates: bool) {
+fn dispatch_reads_to_bowtie(sam_path: &str, bowtie_in: &mut impl Write, anchor_len: usize) {
 
 	let mut bam = if sam_path == "-" {
 		bam::Reader::from_stdin().unwrap_or_else(
@@ -310,7 +308,7 @@ fn dispatch_reads_to_bowtie(sam_path: &str, bowtie_in: &mut impl Write, anchor_l
 	for r in bam.records() {
 		let read = r.unwrap();
 		if read.is_unmapped() == false { continue; }
-		if read.is_duplicate() && count_duplicates == false { continue; }
+		if read.is_duplicate() == false { continue; }
 		if read.seq().len() < anchor_len * 2 { continue; }
 
 		// Any ':' characters in the fragment ID must be removed here
