@@ -3,8 +3,7 @@ use docopt::{Docopt, ArgvMap};
 use std::process::{Command, Stdio};
 use std::io::{stdin, BufRead, BufReader};
 use std::fs::File;
-use rust_htslib::bam;
-use rust_htslib::bam::{Read, ReadError};
+use rust_htslib::bam::{self, Read};
 
 macro_rules! error {
 	($($arg:tt)+) => ({
@@ -20,12 +19,12 @@ pub fn parse_args(usage: &str) -> ArgvMap {
 }
 
 pub struct FileReader {
-	bufread: Box<BufRead>
+	bufread: Box<dyn BufRead>
 }
 
 impl FileReader {
 	pub fn new(path: &str) -> FileReader {
-		let bufread: Box<BufRead> = if path == "-" {
+		let bufread: Box<dyn BufRead> = if path == "-" {
 			Box::new(BufReader::new(stdin()))
 		} else {
 			let file = File::open(path).unwrap_or_else(
@@ -55,9 +54,8 @@ impl FileReader {
 // Returns false after reading the last record, or if reading fails.
 pub fn read_bam_record(bam: &mut bam::Reader, record: &mut bam::Record) -> bool {
 	match bam.read(record) {
-		Err(ReadError::NoMoreRecord) => false,
-		Err(ReadError::Truncated) => error!("BAM file ended prematurely."),
-		Err(ReadError::Invalid) => error!("Invalid BAM record."),
-		Ok(_) => true
+		Some(Ok(())) => true,
+		Some(Err(e)) => error!("Failed reading BAM record: {}", e),
+		None => false
 	}
 }
