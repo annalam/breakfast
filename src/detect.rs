@@ -1,5 +1,5 @@
 
-use crate::common::parse_args;
+use crate::common::{parse_args, read_bam_record};
 use std::mem::swap;
 use std::{str, thread};
 use std::process::{Command, Stdio};
@@ -166,9 +166,6 @@ pub fn main() {
 		signature[8] = '|' as u8;
 		for k in 0..8 { signature[9 + k] = right_grch[bp + k]; }
 
-		// Construct a reference signature for the first breakpoint.
-		// TODO: Implement
-
 		// Calculate the position of the first nucleotide immediately before
 		// the breakpoint, on both sides of the junction.
 		let left_bp_pos = if strand == true {
@@ -228,16 +225,8 @@ pub fn main() {
 			reported[s] = true;
 		}
 
-		/*if read.signature == "CAGAT|ACTTG".as_bytes() {
-			for r in &cluster {
-				println!("Template ID: {}\nFragment signature: {}\nSequence: {}\n", str::from_utf8(&r.frag_id).unwrap(), str::from_utf8(&r.frag_signature).unwrap(), str::from_utf8(&r.sequence).unwrap());
-			}
-		} else {
-			continue;
-		}*/
-
 		if cluster.len() < min_evidence { continue; }
-		cluster = remove_duplicates(cluster);
+		cluster = remove_frag_id_duplicates(cluster);
 		if cluster.len() < min_evidence { continue; }
 
 		print!("{}\t{}\t{}\t\t{}\t{}\t{}\t\t",
@@ -251,7 +240,10 @@ pub fn main() {
 	}
 }
 
-fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
+// This function goes through all reads supporting a rearrangement candidate,
+// identifies duplicate reads with the same fragment ID (e.g. paired end read
+// mates from the same DNA fragment), and discards all but the best one.
+fn remove_frag_id_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 	let mut filtered: Vec<&Evidence> = Vec::new();
 	let mut redundant_with = vec![-1i32; evidence.len()];
 	for a in 0..evidence.len() {
@@ -269,7 +261,7 @@ fn remove_duplicates(evidence: Vec<&Evidence>) -> Vec<&Evidence> {
 
 		if num_redundant == 1 { filtered.push(evidence[a]); continue; }
 
-		// Now we have a list of redundant reads. Since we can only keep
+		// We have a list of redundant reads. Since we can only keep
 		// one of these reads as a source of evidence, we pick the "best"
 		// one. Currently this means the one with the longest flanks.
 		let mut best = 0;
@@ -305,10 +297,9 @@ fn dispatch_reads_to_bowtie(sam_path: &str, bowtie_in: &mut impl Write, anchor_l
 	};
 
 	let mut num_reads_sent = 0;
-	for r in bam.records() {
-		let read = r.unwrap();
+	let mut read = bam::Record::new();
+	while read_bam_record(&mut bam, &mut read) {
 		if read.is_unmapped() == false { continue; }
-		if read.is_duplicate() == false { continue; }
 		if read.seq().len() < anchor_len * 2 { continue; }
 
 		// Any ':' characters in the fragment ID must be removed here
