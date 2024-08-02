@@ -23,10 +23,29 @@ cargo install --force --git https://github.com/annalam/breakfast
 Running Breakfast
 -----------------
 
-To run BreakFast, you need a BAM file containing sequenced reads (in this example, tumor.bam). You also need a Bowtie index and the Bowtie1 executable in your PATH. A Breakfast analysis begins with the "breakfast detect" command, which searches the BAM file for unaligned reads that support a genomic breakpoint:
+To run BreakFast, you need a BAM file containing sequenced reads (in this example, tumor.bam). You also need a Bowtie index and the Bowtie1 executable in your PATH. A Breakfast analysis begins with the `breakfast detect` command, which searches the BAM file for unaligned reads that support a genomic breakpoint:
 ```
 breakfast detect tumor.bam bowtie_indexes/hg38 > tumor.sv
 ```
+
+Once a *.sv file has been produced for all of your BAM files, you can use the `breakfast filter` command to require a minimum number of supporting reads, discard short indels, and filter out germline rearrangements and technical artifacts using a sample sheet that describes which samples are tumor samples and which samples are germline or control samples:
+```
+breakfast filter --min-reads=4 --min-distance=10 --output-dir=filtered sample_sheet.sv
+```
+
+Finally, the `breakfast annotate` command can be used to annotate *.sv files with information about adjacency of rearrangement breakpoints to genes:
+```
+breakfast annotate tumor.sv genes.bed > tumor.annotated.sv
+```
+
+
+
+
+
+
+
+
+
 
 
 
