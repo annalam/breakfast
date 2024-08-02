@@ -1,7 +1,5 @@
 
-use crate::common::parse_args;
-use std::io::{BufRead, BufReader, stdin};
-use std::fs::File;
+use crate::common::{parse_args, FileReader};
 
 const USAGE: &str = "
 Usage:
@@ -30,32 +28,28 @@ pub fn main() {
 	let sv_path = args.get_str("<sv_path>");
 	let bed_path = args.get_str("<bed_path>");
 
-    let mut sv: Box<BufRead>;
-    if sv_path == "-" {   // TODO: Make a function that handles this.
-    	sv = Box::new(BufReader::new(stdin()));
-    } else {
-    	sv = Box::new(BufReader::new(File::open(&sv_path).unwrap()));
-    }
+	let mut sv = FileReader::new(&sv_path);
+	let mut line = String::new();
+	sv.read_line(&mut line);
+	println!("{}", line);
 
-	let mut header = String::new();
-	sv.read_line(&mut header).unwrap();
-	print!("{}", header);
-
-    let bed = BufReader::new(File::open(&bed_path).unwrap());
-    let mut features: Vec<Feature> = Vec::new();
-    for l in bed.lines() {
-        let line = l.unwrap();
-        let mut cols = line.split('\t');
-        features.push(Feature {
-        	chr: cols.next().unwrap().to_string(),
-        	start: cols.next().unwrap().parse::<u32>().unwrap() + 1,
-        	end: cols.next().unwrap().parse().unwrap(),
-        	name: cols.next().unwrap().to_string()
+	let mut bed = FileReader::new(&bed_path);
+	let mut features: Vec<Feature> = Vec::new();
+	while bed.read_line(&mut line) {
+		let cols: Vec<&str> = line.split('\t').collect();
+		if cols.len() < 4 {
+			error!("Feature BED file has too few columns on this line:\n{}\n",
+				&line);
+		}
+		features.push(Feature {
+        	chr: cols[0].into(),
+        	start: cols[1].parse::<u32>().unwrap() + 1,
+        	end: cols[2].parse().unwrap(),
+        	name: cols[3].into()
         });
     }
 
-    for l in sv.lines() {
-		let line = l.unwrap();
+    while sv.read_line(&mut line) {
 		if !line.starts_with("chr") { continue; }
 
 		let cols: Vec<&str> = line.split('\t').collect();

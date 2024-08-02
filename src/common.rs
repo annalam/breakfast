@@ -18,6 +18,11 @@ pub fn parse_args(usage: &str) -> ArgvMap {
 	})
 }
 
+pub fn create_file(path: &str) -> File {
+	File::create(&path).unwrap_or_else(
+		|_| error!("Cannot create file {}.", &path))
+}
+
 pub struct FileReader {
 	bufread: Box<dyn BufRead>
 }
@@ -43,10 +48,11 @@ impl FileReader {
 
 	pub fn read_line(&mut self, line: &mut String) -> bool {
 		line.clear();
-		match self.bufread.read_line(line) {
-			Ok(len) => len > 0,
-			_ => { error!("I/O error while reading from file."); }
-		}
+		let Ok(bytes_read) = self.bufread.read_line(line) else {
+			error!("I/O error while reading from file.");
+		};
+		if line.ends_with('\n') { line.pop(); }  // Remove trailing newline
+		bytes_read > 0
 	}
 }
 

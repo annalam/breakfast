@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::cmp::{min, max, Ordering};
 use std::io::{BufReader, BufWriter, BufRead, Write};
 use rust_htslib::bam;
-use rust_htslib::bam::Read;
 use bio::io::fasta;
 use bio::alphabets::dna;
 
@@ -113,20 +112,22 @@ pub fn main() {
 			seq = dna::revcomp(&seq);
 		}
 
-		// If the read is at the very edge of a chromosome, ignore it.
-		if pos + full_len >= genome[chr].len() { continue; }
-		if mpos + full_len >= genome[mchr].len() { continue; }
-
-		let left_grch = if strand == true {
-			genome[chr][pos-1..pos+full_len-1].to_vec()
+		let chr_seq = &genome[chr];
+		let left_grch: Vec<u8> = if strand == true {
+			//genome[chr][pos-1..pos+full_len-1].to_vec();
+			(0..full_len).map(|k| *chr_seq.get(pos - 1 + k).unwrap_or(&b'N')).collect()
 		} else {
-			dna::revcomp(&genome[chr][pos+anchor_len-full_len-1..pos+anchor_len-1].to_vec())
+			//dna::revcomp(&genome[chr][pos+anchor_len-full_len-1..pos+anchor_len-1].to_vec());
+			(0..full_len).map(|k| dna::complement(*chr_seq.get(pos + anchor_len - 2 - k).unwrap_or(&b'N'))).collect()
 		};
 
-		let right_grch = if mstrand == true {
-			genome[mchr][mpos+anchor_len-full_len-1..mpos+anchor_len-1].to_vec()
+		let mchr_seq = &genome[mchr];
+		let right_grch: Vec<u8> = if mstrand == true {
+			//genome[mchr][mpos+anchor_len-full_len-1..mpos+anchor_len-1].to_vec();
+			(0..full_len).map(|k| *mchr_seq.get(mpos + anchor_len - full_len - 1 + k).unwrap_or(&b'N')).collect()
 		} else {
-			dna::revcomp(&genome[mchr][mpos-1..mpos+full_len-1].to_vec())
+			//dna::revcomp(&genome[mchr][mpos-1..mpos+full_len-1].to_vec());
+			(0..full_len).map(|k| dna::complement(*mchr_seq.get(mpos + full_len - 2 - k).unwrap_or(&b'N'))).collect()
 		};
 
 		// Identify the breakpoint location that minimizes the number of
@@ -151,7 +152,7 @@ pub fn main() {
 			}
 		}
 
-		let mut junction: Vec<u8> = vec![' ' as u8; full_len + 1];
+		let mut junction = vec![b' '; full_len + 1];
 		for k in 0..bp {
 			junction[k] = if seq[k] == left_grch[k] { seq[k] } else { seq[k].to_ascii_lowercase() };
 		}
@@ -236,7 +237,7 @@ pub fn main() {
 			if r > 0 { print!(";"); }
 			print!("{}", str::from_utf8(cluster[r].sequence.as_slice()).unwrap());
 		}
-		println!("\t{}\t", str::from_utf8(&read.signature).unwrap());
+		println!("\t\t");
 	}
 }
 
@@ -299,7 +300,14 @@ fn dispatch_reads_to_bowtie(sam_path: &str, bowtie_in: &mut impl Write, anchor_l
 	let mut num_reads_sent = 0;
 	let mut read = bam::Record::new();
 	while read_bam_record(&mut bam, &mut read) {
-		if read.is_unmapped() == false { continue; }
+		// Don't bother analyzing reads that were aligned to the reference
+		// genome at their full length
+		if read.is_unmapped() == false {
+			let cigar = read.cigar();
+			if cigar.leading_softclips() < anchor_len as i64 && cigar.trailing_softclips() < anchor_len as i64 {
+				continue;
+			}
+		}
 		if read.seq().len() < anchor_len * 2 { continue; }
 
 		// Any ':' characters in the fragment ID must be removed here
